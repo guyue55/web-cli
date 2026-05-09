@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Terminal from './components/Terminal';
 import { Sidebar } from './components/Sidebar/Sidebar';
 import { ChatHistory } from './components/Chat/ChatHistory';
@@ -15,11 +15,25 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [initialPrompt, setInitialPrompt] = useState<string | null>(null);
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    return (localStorage.getItem('gemini-theme') as 'dark' | 'light') || 'light';
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('gemini-theme', theme);
+  }, [theme]);
 
   const handleSelectSession = (session: HistoryItem) => {
     setSelectedSession(session);
     setIsLiveMode(false);
     setInitialPrompt(null);
+  };
+
+  const toggleTheme = () => {
+    const newTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+    document.documentElement.setAttribute('data-theme', newTheme);
   };
 
   const handleNewChat = () => {
@@ -86,6 +100,9 @@ function App() {
              {isDiscovering && <span className="scanning-indicator">Streaming Discovery...</span>}
           </div>
           <div className="header-actions">
+             <button className="theme-toggle" onClick={toggleTheme} title="Toggle Theme">
+                {theme === 'dark' ? '☀️' : '🌙'}
+             </button>
              {selectedSession && (
                <div className="header-tabs">
                  <button 

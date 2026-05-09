@@ -23,7 +23,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectSession,
   onNewChat,
   searchQuery,
-  onSearchChange,
   isLoading,
   collapsed,
   onToggle

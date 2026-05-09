@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import type { ChatMessage } from '../../hooks/useTranscript';
 
@@ -51,9 +51,9 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
           ))}
           
           {transcript.length > 0 && (
-            <div className="continue-prompt" style={{ display: 'flex', justifyContent: 'center', marginTop: '60px' }}>
-               <button className="new-chat-btn" style={{ width: 'auto' }} onClick={onStartLive}>
-                 Resume Realtime Agent
+            <div className="continue-prompt" style={{ display: 'flex', justifyContent: 'center', marginTop: '80px' }}>
+               <button className="new-chat-btn" style={{ width: 'auto', borderRadius: '24px', padding: '12px 32px' }} onClick={onStartLive}>
+                 Resume Interaction
                </button>
             </div>
           )}

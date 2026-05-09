@@ -1,4 +1,21 @@
 :root {
+  /* Default: Light Theme (Gemini White) */
+  --bg-main: #ffffff;
+  --bg-sidebar: #f0f2f4;
+  --bg-hover: rgba(0, 0, 0, 0.05);
+  --bg-user-bubble: #f0f2f4;
+  --bg-input: #ffffff;
+  --accent-blue: #0b57d0;
+  --text-primary: #1f1f1f;
+  --text-secondary: #444746;
+  --border-subtle: rgba(0, 0, 0, 0.1);
+  --font-main: 'Google Sans', 'Inter', system-ui, -apple-system, sans-serif;
+  --radius-pill: 32px;
+  --radius-card: 16px;
+  --shadow-float: 0 1px 3px 1px rgba(0,0,0,0.15);
+}
+
+[data-theme='dark'] {
   --bg-main: #131314;
   --bg-sidebar: #1e1f20;
   --bg-hover: rgba(255, 255, 255, 0.08);
@@ -8,10 +25,7 @@
   --text-primary: #e3e3e3;
   --text-secondary: #9aa0a6;
   --border-subtle: rgba(255, 255, 255, 0.1);
-  --font-main: 'Google Sans', 'Inter', system-ui, -apple-system, sans-serif;
-  --radius-pill: 32px;
-  --radius-card: 16px;
-  --shadow-float: 0 4px 20px rgba(0,0,0,0.4);
+  --shadow-float: 0 4px 20px rgba(0, 0, 0, 0.4);
 }
 
 body, html, #root {
@@ -24,6 +38,7 @@ body, html, #root {
   color: var(--text-primary);
   font-family: var(--font-main);
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.3s, color 0.3s;
 }
 
 .app-container {
@@ -39,7 +54,7 @@ body, html, #root {
   background-color: var(--bg-sidebar);
   display: flex;
   flex-direction: column;
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s;
   flex-shrink: 0;
   border-right: 1px solid var(--border-subtle);
 }
@@ -56,7 +71,7 @@ body, html, #root {
 }
 
 .new-chat-btn {
-  background-color: #2d2e30;
+  background-color: var(--bg-user-bubble);
   border: none;
   border-radius: 12px;
   padding: 10px 16px;
@@ -72,7 +87,7 @@ body, html, #root {
   white-space: nowrap;
 }
 
-.new-chat-btn:hover { background-color: #3c3d3f; }
+.new-chat-btn:hover { background-color: var(--bg-hover); }
 
 .session-list-container {
   flex: 1;
@@ -100,7 +115,6 @@ body, html, #root {
   margin: 0;
 }
 
-/* Family Tree Card Style */
 .session-card {
   padding: 12px 14px;
   margin-bottom: 4px;
@@ -116,13 +130,11 @@ body, html, #root {
 .session-card:hover {
   background-color: var(--bg-hover);
   border-color: var(--border-subtle);
-  transform: translateX(4px);
 }
 
 .session-card.active {
-  background-color: rgba(138, 180, 248, 0.1);
-  border-color: rgba(138, 180, 248, 0.2);
-  box-shadow: inset 0 0 10px rgba(138, 180, 248, 0.05);
+  background-color: var(--bg-hover);
+  border-color: var(--accent-blue);
 }
 
 .session-card.active .history-name { color: var(--accent-blue); }
@@ -207,7 +219,7 @@ body, html, #root {
 
 .header-tabs {
   display: flex;
-  background-color: #1e1f20;
+  background-color: var(--bg-sidebar);
   padding: 4px;
   border-radius: 20px;
   border: 1px solid var(--border-subtle);
@@ -225,9 +237,21 @@ body, html, #root {
 }
 
 .tab-btn.active {
-  background-color: #37393b;
-  color: white;
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-float);
 }
+
+.theme-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 20px;
+  color: var(--text-secondary);
+  padding: 8px;
+  border-radius: 50%;
+}
+.theme-toggle:hover { background-color: var(--bg-hover); }
 
 .content-area {
   flex: 1;
@@ -298,6 +322,7 @@ body, html, #root {
   overflow-x: auto;
   border: 1px solid var(--border-subtle);
   margin: 16px 0;
+  color: #e3e3e3;
 }
 
 /* Floating Prompt */
@@ -313,7 +338,7 @@ body, html, #root {
   padding: 8px 16px;
   display: flex;
   align-items: center;
-  box-shadow: 0 4px 30px rgba(0,0,0,0.5);
+  box-shadow: 0 4px 30px rgba(0,0,0,0.1);
   border: 1px solid var(--border-subtle);
   z-index: 100;
 }
@@ -322,7 +347,7 @@ body, html, #root {
   flex: 1;
   background: transparent;
   border: none;
-  color: white;
+  color: var(--text-primary);
   padding: 10px;
   font-size: 16px;
   outline: none;
@@ -334,8 +359,8 @@ body, html, #root {
 }
 
 .icon-btn {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   border: none;
   background: transparent;
@@ -347,7 +372,7 @@ body, html, #root {
   transition: background 0.2s;
 }
 
-.icon-btn:hover { background-color: var(--bg-hover); color: white; }
+.icon-btn:hover { background-color: var(--bg-hover); color: var(--text-primary); }
 
 /* Welcome */
 .welcome-screen {
@@ -396,5 +421,5 @@ body, html, #root {
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 8px; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: var(--bg-hover); }
