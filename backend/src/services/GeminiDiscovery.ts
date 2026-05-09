@@ -15,7 +15,7 @@ export interface GeminiSessionRecord {
 }
 
 /**
- * GeminiDiscovery V5: Blazing fast discovery using direct filesystem access.
+ * GeminiDiscovery V6: Fixed name extraction by skipping metadata line and handling part arrays.
  */
 export class GeminiDiscovery {
   static async discoverAndStream(ws: WebSocket) {
@@ -29,13 +29,12 @@ export class GeminiDiscovery {
       const { projects } = JSON.parse(fs.readFileSync(projectsFile, 'utf-8'));
       const projectEntries = Object.entries(projects as Record<string, string>);
 
-      // 1. Immediately stream project list
       ws.send(JSON.stringify({ 
         type: 'project-list', 
         projects: projectEntries.map(([path, name]) => ({ path, name })) 
       }));
 
-      console.log(`[Discovery] Starting fast FS scan for ${projectEntries.length} projects`);
+      console.log(`[Discovery] Starting fixed FS scan for ${projectEntries.length} projects`);
       let totalFound = 0;
 
       for (const [projectPath, projectName] of projectEntries) {
@@ -48,27 +47,46 @@ export class GeminiDiscovery {
           const files = fs.readdirSync(chatDir).filter(f => f.endsWith('.jsonl'));
           
           for (const file of files) {
-            // Extract UUID from filename: session-YYYY-MM-DDTHH-mm-UUID.jsonl
+            const filePath = path.join(chatDir, file);
+            const stats = fs.statSync(filePath);
+            
+            // Extract UUID from filename
             const match = file.match(/session-.*-(.*)\.jsonl$/);
             const uuid = match ? match[1] : file.replace('.jsonl', '');
             
-            // For the 'name', we briefly peek at the first line of the file
+            // Robust Name Extraction:
+            // Line 0 is often metadata. The first user message (Line 1 or later) is the best name.
             let sessionName = 'Untitled Session';
             try {
-              const firstLine = fs.readFileSync(path.join(chatDir, file), 'utf-8').split('\n')[0];
-              if (firstLine) {
-                const entry = JSON.parse(firstLine);
-                sessionName = entry.content ? (typeof entry.content === 'string' ? entry.content : 'Complex Session') : 'Empty Session';
-                if (sessionName.length > 30) sessionName = sessionName.substring(0, 30) + '...';
+              const content = fs.readFileSync(filePath, 'utf-8');
+              const lines = content.split('\n').filter(l => l.trim());
+              
+              // Look for the first message (skip metadata at index 0)
+              for (let i = 1; i < lines.length; i++) {
+                const entry = JSON.parse(lines[i]);
+                if (entry.content) {
+                  let text = '';
+                  if (typeof entry.content === 'string') {
+                    text = entry.content;
+                  } else if (Array.isArray(entry.content)) {
+                    text = entry.content.map((p: any) => p.text || '').join('');
+                  }
+                  
+                  if (text.trim()) {
+                    sessionName = text.trim();
+                    if (sessionName.length > 50) sessionName = sessionName.substring(0, 47) + '...';
+                    break; 
+                  }
+                }
               }
             } catch (e) {}
 
             const record: GeminiSessionRecord = {
               projectPath,
               projectName,
-              index: '?', // Index is CLI-only, use UUID as primary
+              index: '?', 
               name: sessionName,
-              time: fs.statSync(path.join(chatDir, file)).mtime.toLocaleDateString(),
+              time: stats.mtime.toLocaleString(),
               id: uuid
             };
 
@@ -83,7 +101,6 @@ export class GeminiDiscovery {
         }
       }
 
-      console.log(`[Discovery] FS scan complete. Found ${totalFound} sessions.`);
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'discovery-complete', count: totalFound }));
       }

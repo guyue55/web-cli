@@ -69,11 +69,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       onClick={() => onSelectSession(item)}
                       title={item.name}
                     >
-                      <span className="icon">💬</span>
                       {!collapsed && <span className="history-name">{item.name}</span>}
-                      {isActive && <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#10b981', marginLeft: 'auto' }} />}
-                    </li>
-                  );
+                      {collapsed ? (
+                        <span className="icon">💬</span>
+                      ) : (
+                        <div className="history-footer">
+                          <span>{item.time}</span>
+                          {isActive && <div className="active-dot" />}
+                        </div>
+                      )}
+                    </li>                  );
                 })}
               </ul>
             </div>
