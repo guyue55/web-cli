@@ -69,11 +69,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       <div className="sidebar-mid session-list-container">
-        {!collapsed && <div style={{ marginTop: 16, padding: '0 12px', fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>最近</div>}
+        {!collapsed && <div style={{ marginTop: 8, padding: '0 12px', fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>最近</div>}
         
         {groupedHistory.length === 0 && isLoading ? (
           <div className="skeleton-list">
-             {[1,2,3].map(i => <div key={i} className="skeleton-item" style={{ height: 40, margin: '8px 10px', borderRadius: 20, backgroundColor: 'var(--bg-hover)' }} />)}
+             {[1,2,3].map(i => <div key={i} className="skeleton-item" style={{ height: 32, margin: '4px 10px', borderRadius: 16, backgroundColor: 'var(--bg-hover)' }} />)}
           </div>
         ) : groupedHistory.map(({ name: projectName, items }) => {
           const project = projects.find(p => p.name === projectName);

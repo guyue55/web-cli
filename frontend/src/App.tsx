@@ -27,7 +27,7 @@ function App() {
   };
 
   const handleNewChat = () => {
-    setSelectedSession(null); // Clear selection for a truly "New" state
+    setSelectedSession(null);
     setIsLiveMode(false);
     setInitialPrompt(null);
   };
@@ -56,6 +56,14 @@ function App() {
 
   return (
     <div className="app-container">
+      <button 
+        className="mobile-hamburger" 
+        aria-label="Toggle Sidebar"
+        onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+      >
+        ☰
+      </button>
+
       <Sidebar 
         groupedHistory={groupedHistory}
         activeSessions={activeSessions}
@@ -73,10 +81,12 @@ function App() {
       <div className="main-content">
         <header className="header">
           <div className="header-left">
-             <span style={{ fontSize: 18, fontWeight: 500, color: 'var(--accent-blue)' }}>Gemini</span>
+             <span className="brand-logo">Gemini</span>
           </div>
           
-          <h1>{selectedSession?.name || 'Gemini'}</h1>
+          <div className="header-center">
+            <h1>{selectedSession?.name || 'Gemini'}</h1>
+          </div>
           
           <div className="header-right">
              <button className="theme-toggle" onClick={toggleTheme} title="Toggle Theme">
@@ -124,9 +134,29 @@ function App() {
             </>
           ) : (
             <div className="welcome-screen">
-               <div className="welcome-icon">✦</div>
-               <h2>您好，我是 Gemini</h2>
-               <p style={{ color: 'var(--text-secondary)' }}>请选择一个项目会话或在下方输入以开始编码。</p>
+               <div className="welcome-greeting">
+                 <h2 className="gradient-text">您好，开发者</h2>
+                 <p className="subtitle">我是您的 Gemini 代码助手。今天想做些什么？</p>
+               </div>
+               
+               <div className="suggestion-grid">
+                  <div className="suggestion-card" onClick={() => handlePromptSubmit("帮我分析当前项目的架构")}>
+                     <span className="card-icon">🏗️</span>
+                     <p>分析项目架构</p>
+                  </div>
+                  <div className="suggestion-card" onClick={() => handlePromptSubmit("检查代码中的潜在漏洞")}>
+                     <span className="card-icon">🛡️</span>
+                     <p>安全漏洞检查</p>
+                  </div>
+                  <div className="suggestion-card" onClick={() => handlePromptSubmit("为我编写单元测试")}>
+                     <span className="card-icon">🧪</span>
+                     <p>编写单元测试</p>
+                  </div>
+                  <div className="suggestion-card" onClick={() => handlePromptSubmit("重构并优化这段逻辑")}>
+                     <span className="card-icon">⚡</span>
+                     <p>重构优化代码</p>
+                  </div>
+               </div>
             </div>
           )}
         </div>
