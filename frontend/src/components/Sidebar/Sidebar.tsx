@@ -82,19 +82,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     >
                       <div className="card-main">
                         {!collapsed && <span className="history-name">{item.name}</span>}
-                        {collapsed ? (
+                        {collapsed && (
                           <span style={{ fontSize: 16 }}>💬</span>
-                        ) : (
-                          <button 
-                            className="delete-btn" 
-                            title="删除会话"
-                            onClick={(e) => {
-                               e.stopPropagation();
-                               onDeleteSession(item);
-                            }}
-                          >
-                            ×
-                          </button>
                         )}
                       </div>
                       

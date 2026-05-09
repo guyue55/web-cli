@@ -134,10 +134,6 @@ body, html, #root {
 .history-name { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
 .history-footer { display: flex; justify-content: flex-end; margin-top: 2px; font-size: 10px; color: var(--text-dim); min-height: 6px; }
 
-.delete-btn { opacity: 0; background: none; border: none; cursor: pointer; color: var(--text-dim); font-size: 18px; transition: opacity 0.2s ease; }
-.session-card:hover .delete-btn { opacity: 0.8; }
-.delete-btn:hover { color: #d93025; opacity: 1 !important; }
-
 /* --- Main Content --- */
 .main-content {
   flex: 1;
