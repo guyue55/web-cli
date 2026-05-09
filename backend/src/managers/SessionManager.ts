@@ -3,7 +3,7 @@ import { spawn } from 'child_process';
 import { WebSocket } from 'ws';
 
 export interface ISession {
-  id: string; // resumeIndex
+  id: string; // UUID
   projectPath: string;
   pty: {
     write: (data: string) => void;
@@ -18,23 +18,24 @@ export interface ISession {
 export class SessionManager {
   private static sessions = new Map<string, ISession>();
 
-  static getSessionKey(projectPath: string, index: string): string {
-    return `${projectPath}:${index}`;
+  static getSessionKey(projectPath: string, uuid: string): string {
+    return `${projectPath}:${uuid}`;
   }
 
-  static getOrCreateSession(resumeIndex: string, projectPath: string): ISession {
-    const sessionKey = this.getSessionKey(projectPath, resumeIndex);
+  static getOrCreateSession(uuid: string, projectPath: string): ISession {
+    const sessionKey = this.getSessionKey(projectPath, uuid);
     if (this.sessions.has(sessionKey)) {
       return this.sessions.get(sessionKey)!;
     }
 
-    console.log(`[SessionManager] Resuming Gemini session #${resumeIndex} at ${projectPath}`);
+    console.log(`[SessionManager] Resuming Gemini session UUID: ${uuid} at ${projectPath}`);
     
     let ptyProcess: any;
     let useFallback = false;
 
+    // Direct resume using UUID
     try {
-      ptyProcess = pty.spawn('gemini', ['--resume', resumeIndex, '--trust'], {
+      ptyProcess = pty.spawn('gemini', ['--resume', uuid, '--trust'], {
         name: 'xterm-color',
         cols: 80,
         rows: 24,
@@ -47,7 +48,7 @@ export class SessionManager {
     }
 
     if (useFallback) {
-      const cp = spawn('gemini', ['--resume', resumeIndex, '--trust'], {
+      const cp = spawn('gemini', ['--resume', uuid, '--trust'], {
         cwd: projectPath,
         env: { ...process.env, TERM: 'xterm-256color' } as any,
         stdio: ['pipe', 'pipe', 'pipe']
@@ -64,7 +65,7 @@ export class SessionManager {
         write: (data: string) => {
           cp.stdin?.write(data);
         },
-        resize: () => {}, // Ignored in fallback
+        resize: () => {},
         onData: (cb: (data: string) => void) => {
           onDataCb = cb;
         },
@@ -75,7 +76,7 @@ export class SessionManager {
     }
 
     const session: ISession = {
-      id: resumeIndex,
+      id: uuid,
       projectPath,
       pty: ptyProcess,
       buffer: '',
@@ -84,7 +85,6 @@ export class SessionManager {
 
     ptyProcess.onData((data: string) => {
       session.buffer += data;
-      // Keep buffer bounded
       if (session.buffer.length > 200000) {
         session.buffer = session.buffer.slice(-200000);
       }
@@ -97,7 +97,7 @@ export class SessionManager {
     });
 
     ptyProcess.onExit(({ exitCode }: { exitCode: number }) => {
-      console.log(`[SessionManager] Gemini Session ${resumeIndex} exited with code ${exitCode}`);
+      console.log(`[SessionManager] Gemini Session ${uuid} exited with code ${exitCode}`);
       this.sessions.delete(sessionKey);
     });
 

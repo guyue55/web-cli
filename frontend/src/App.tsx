@@ -58,7 +58,7 @@ function App() {
             <>
               {isLiveMode ? (
                 <div className="terminal-container" style={{ height: '100%', background: '#000' }}>
-                   <Terminal resumeIndex={selectedSession.index} projectPath={selectedSession.projectPath} />
+                   <Terminal uuid={selectedSession.id} projectPath={selectedSession.projectPath} />
                 </div>
               ) : (
                 <ChatHistory 

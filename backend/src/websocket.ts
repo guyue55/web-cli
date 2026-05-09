@@ -8,27 +8,25 @@ export function setupWebSocket(wss: WebSocketServer) {
     const url = new URL(req.url || '', `http://${req.headers.host}`);
     const pathname = url.pathname;
 
-    // Route 1: Discovery (Asynchronous scanning)
+    // Route 1: Discovery (Streaming scan)
     if (pathname === '/discovery') {
       console.log('[WebSocket] New discovery connection');
       GeminiDiscovery.discoverAndStream(ws);
       return;
     }
 
-    // Route 2: Terminal Session (Existing logic)
-    const resumeIndex = url.searchParams.get('resumeIndex');
+    // Route 2: Terminal Session (Resume by UUID)
+    const uuid = url.searchParams.get('uuid');
     const projectPath = url.searchParams.get('projectPath');
 
-    if (!resumeIndex || !projectPath) {
-      // ws.send(JSON.stringify({ type: 'output', data: '\r\n\x1b[31m[Error] resumeIndex and projectPath are required\x1b[0m\r\n' }));
-      // ws.close();
+    if (!uuid || !projectPath) {
       return;
     }
 
-    const sessionKey = SessionManager.getSessionKey(projectPath, resumeIndex);
+    const sessionKey = SessionManager.getSessionKey(projectPath, uuid);
 
     try {
-      const session = SessionManager.getOrCreateSession(resumeIndex, projectPath);
+      const session = SessionManager.getOrCreateSession(uuid, projectPath);
       session.clients.add(ws);
       ws.send(JSON.stringify({ type: 'output', data: session.buffer }));
 

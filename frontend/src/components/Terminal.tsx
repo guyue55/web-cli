@@ -4,11 +4,11 @@ import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 
 interface TerminalProps {
-  resumeIndex: string;
+  uuid: string;
   projectPath: string;
 }
 
-const Terminal: React.FC<TerminalProps> = ({ resumeIndex, projectPath }) => {
+const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
@@ -38,7 +38,8 @@ const Terminal: React.FC<TerminalProps> = ({ resumeIndex, projectPath }) => {
     xtermRef.current = term;
 
     const host = window.location.hostname;
-    const wsUrl = `ws://${host}:3001?resumeIndex=${resumeIndex}&projectPath=${encodeURIComponent(projectPath)}`;
+    // Connect specifying the uuid
+    const wsUrl = `ws://${host}:3001?uuid=${uuid}&projectPath=${encodeURIComponent(projectPath)}`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
@@ -55,6 +56,12 @@ const Terminal: React.FC<TerminalProps> = ({ resumeIndex, projectPath }) => {
     term.onData((data) => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'input', data }));
+      }
+    });
+
+    term.onResize((size) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'resize', cols: size.cols, rows: size.rows }));
       }
     });
 
@@ -79,7 +86,7 @@ const Terminal: React.FC<TerminalProps> = ({ resumeIndex, projectPath }) => {
       ws.close();
       term.dispose();
     };
-  }, [resumeIndex, projectPath]);
+  }, [uuid, projectPath]);
 
   const focusInput = () => {
     if (inputRef.current) inputRef.current.focus();
