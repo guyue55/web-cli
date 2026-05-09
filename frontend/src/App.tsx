@@ -1,47 +1,36 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import Terminal from './components/Terminal';
 import { Sidebar } from './components/Sidebar/Sidebar';
 import { ChatHistory } from './components/Chat/ChatHistory';
+import { PromptBox } from './components/PromptBox/PromptBox';
 import { useSessions, type HistoryItem } from './hooks/useSessions';
 import { useTranscript } from './hooks/useTranscript';
+import { useTheme } from './hooks/useTheme';
 import './App.css';
 
 function App() {
   const { activeSessions, projects, groupedHistory, isDiscovering } = useSessions();
   const [selectedSession, setSelectedSession] = useState<HistoryItem | null>(null);
   const { transcript, isLoading: isLoadingTranscript, hasMore, loadMore } = useTranscript(selectedSession);
+  const { theme, toggleTheme } = useTheme();
   
   const [isLiveMode, setIsLiveMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [initialPrompt, setInitialPrompt] = useState<string | null>(null);
-  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-    return (localStorage.getItem('gemini-theme') as 'dark' | 'light') || 'light';
-  });
-
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('gemini-theme', theme);
-  }, [theme]);
 
   const handleSelectSession = (session: HistoryItem) => {
     setSelectedSession(session);
     setIsLiveMode(false);
     setInitialPrompt(null);
-  };
-
-  const toggleTheme = () => {
-    const newTheme = theme === 'dark' ? 'light' : 'dark';
-    setTheme(newTheme);
-    document.documentElement.setAttribute('data-theme', newTheme);
+    if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
   };
 
   const handleNewChat = () => {
-    // Start a new session in the first project by default, or current project
     const defaultProject = projects[0] || { path: window.location.pathname, name: 'default' };
     const newSession: HistoryItem = {
       id: `new-${Date.now()}`,
-      name: 'New Chat',
+      name: '新对话',
       projectPath: defaultProject.path,
       projectName: defaultProject.name,
       index: '0',
@@ -49,15 +38,15 @@ function App() {
       updatedAt: Date.now()
     };
     setSelectedSession(newSession);
-    setIsLiveMode(true); // Jump straight to terminal for new chat
+    setIsLiveMode(true);
     setInitialPrompt(null);
+    if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
   };
 
   const handlePromptSubmit = (text: string) => {
     if (!text.trim()) return;
     
     if (!selectedSession) {
-      // If no session selected, start a new one with this prompt
       const defaultProject = projects[0] || { path: '/', name: 'default' };
       const newSession: HistoryItem = {
         id: `new-${Date.now()}`,
@@ -70,10 +59,24 @@ function App() {
       };
       setSelectedSession(newSession);
       setInitialPrompt(text);
-      setIsLiveMode(true);
     } else {
       setInitialPrompt(text);
-      setIsLiveMode(true);
+    }
+    setIsLiveMode(true);
+  };
+
+  const handleDeleteSession = async (item: HistoryItem) => {
+    if (!window.confirm(`确认删除会话 "${item.name}"?`)) return;
+    try {
+      const host = window.location.hostname || 'localhost';
+      const res = await fetch(`http://${host}:3001/history/${item.index}?projectPath=${encodeURIComponent(item.projectPath)}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        if (selectedSession?.id === item.id) setSelectedSession(null);
+      }
+    } catch (e) {
+      console.error('Failed to delete session', e);
     }
   };
 
@@ -86,6 +89,7 @@ function App() {
         selectedSession={selectedSession}
         onSelectSession={handleSelectSession}
         onNewChat={handleNewChat}
+        onDeleteSession={handleDeleteSession}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         isLoading={isDiscovering}
@@ -96,26 +100,31 @@ function App() {
       <div className="main-content">
         <header className="header">
           <div className="header-left">
-             <h1>{selectedSession?.name || 'Gemini'}</h1>
-             {isDiscovering && <span className="scanning-indicator">Streaming Discovery...</span>}
+             <span style={{ fontSize: 18, fontWeight: 500, color: 'var(--accent-blue)' }}>Gemini</span>
           </div>
-          <div className="header-actions">
-             <button className="theme-toggle" onClick={toggleTheme} title="Toggle Theme">
+          
+          <h1>{selectedSession?.name || 'Gemini'}</h1>
+          
+          <div className="header-right">
+             <button className="new-chat-btn" style={{ background: '#c2e7ff', color: '#001d35', padding: '10px 24px', borderRadius: '24px', fontSize: 13, border: 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>💎</span> 升级到 Google AI Plus
+             </button>
+             <button className="theme-toggle" onClick={toggleTheme}>
                 {theme === 'dark' ? '☀️' : '🌙'}
              </button>
              {selectedSession && (
-               <div className="header-tabs">
+               <div className="header-tabs" style={{ marginLeft: 12 }}>
                  <button 
                    className={`tab-btn ${!isLiveMode ? 'active' : ''}`}
                    onClick={() => setIsLiveMode(false)}
                  >
-                   History
+                   对话
                  </button>
                  <button 
                    className={`tab-btn ${isLiveMode ? 'active' : ''}`}
                    onClick={() => setIsLiveMode(true)}
                  >
-                   Live Agent
+                   终端
                  </button>
                </div>
              )}
@@ -126,7 +135,7 @@ function App() {
           {selectedSession ? (
             <>
               {isLiveMode ? (
-                <div className="terminal-container" style={{ height: '100%', background: '#000' }}>
+                <div className="terminal-container">
                    <Terminal 
                      uuid={selectedSession.id} 
                      projectPath={selectedSession.projectPath} 
@@ -146,42 +155,14 @@ function App() {
           ) : (
             <div className="welcome-screen">
                <div className="welcome-icon">✦</div>
-               <h2>Hello, I'm Gemini</h2>
-               <p style={{ color: 'var(--text-secondary)' }}>Choose a session or type below to start coding.</p>
-               {isDiscovering && <p style={{ fontSize: '12px', marginTop: '20px' }}>Looking for your projects...</p>}
+               <h2>您好，我是 Gemini</h2>
+               <p style={{ color: 'var(--text-secondary)' }}>请选择一个会话或在下方输入以开始。</p>
             </div>
           )}
         </div>
 
         {!isLiveMode && (
-          <div className="prompt-container">
-            <input 
-              className="prompt-input" 
-              type="text" 
-              placeholder="Ask me anything about your project..." 
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  handlePromptSubmit((e.target as HTMLInputElement).value);
-                  (e.target as HTMLInputElement).value = '';
-                }
-              }}
-            />
-            <div className="prompt-actions">
-               <button className="icon-btn" title="Voice">🎤</button>
-               <button className="icon-btn" title="Image">🖼️</button>
-               <button 
-                  className="icon-btn send-btn" 
-                  style={{ color: 'var(--accent-blue)' }}
-                  onClick={(e) => {
-                    const input = e.currentTarget.parentElement?.previousElementSibling as HTMLInputElement;
-                    handlePromptSubmit(input.value);
-                    input.value = '';
-                  }}
-                >
-                  ▲
-               </button>
-            </div>
-          </div>
+          <PromptBox onSubmit={handlePromptSubmit} />
         )}
       </div>
     </div>
