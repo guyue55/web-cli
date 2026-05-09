@@ -3,6 +3,7 @@ import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import { WebSocket } from 'ws';
 
 const execAsync = promisify(exec);
 const GEMINI_BASE_DIR = path.join(os.homedir(), '.gemini');
@@ -13,6 +14,7 @@ export interface GeminiSessionRecord {
   index: string;
   name: string;
   time: string;
+  updatedAt: number;
   id: string; // UUID
 }
 
@@ -30,64 +32,79 @@ export class GeminiService {
     return this.sessionCache;
   }
 
+  static generateNewId(): string {
+    return `new-${Date.now()}`;
+  }
+
+  /**
+   * High-performance background scanner. 
+   * Uses FS-peeking to update cache without spawning processes.
+   */
   static async startBackgroundScanner() {
     if (this.isScanning) return;
     this.isScanning = true;
 
     const scan = async () => {
-      console.log(`[GeminiService] Scanning all projects for sessions...`);
+      console.log(`[GeminiService] Peeking FS for session cache update...`);
       try {
         const projectsFile = path.join(GEMINI_BASE_DIR, 'projects.json');
-        if (!fs.existsSync(projectsFile)) {
-          console.warn('[GeminiService] projects.json not found');
-          return;
-        }
+        if (!fs.existsSync(projectsFile)) return;
 
         const { projects } = JSON.parse(fs.readFileSync(projectsFile, 'utf-8'));
         const allRecords: GeminiSessionRecord[] = [];
 
-        const scanPromises = Object.entries(projects as Record<string, string>).map(async ([projectPath, projectName]) => {
-          if (!fs.existsSync(projectPath)) return;
-          try {
-            const { stdout } = await execAsync('gemini --list-sessions', { cwd: projectPath, timeout: 8000 });
-            const lines = stdout.split('\n');
-            const sessionRegex = /^\s*(\d+)\.\s+(.*)\s+\((.*)\)\s+\[(.*)\]/;
-            
-            let projCount = 0;
-            for (const line of lines) {
-              const cleanLine = line.replace(/\x1B\[[0-9;]*[mK]/g, '');
-              const match = cleanLine.match(sessionRegex);
-              if (match) {
-                allRecords.push({
-                  projectPath,
-                  projectName,
-                  index: match[1],
-                  name: match[2].trim(),
-                  time: match[3].trim(),
-                  id: match[4].trim()
-                });
-                projCount++;
-              }
-            }
-            if (projCount > 0) console.log(`[GeminiService] Found ${projCount} sessions in ${projectName}`);
-          } catch (e) {
-            // Silence project-specific errors
-          }
-        });
+        for (const [projectPath, projectName] of Object.entries(projects as Record<string, string>)) {
+          const chatDir = path.join(GEMINI_BASE_DIR, 'tmp', projectName, 'chats');
+          if (!fs.existsSync(chatDir)) continue;
 
-        await Promise.all(scanPromises);
-        this.sessionCache = allRecords;
-        console.log(`[GeminiService] Cache updated. Total sessions: ${allRecords.length}`);
+          try {
+            const files = fs.readdirSync(chatDir).filter(f => f.endsWith('.jsonl'));
+            for (const file of files) {
+              const filePath = path.join(chatDir, file);
+              const stats = fs.statSync(filePath);
+              const match = file.match(/session-.*-(.*)\.jsonl$/);
+              const uuid = match ? match[1] : file.replace('.jsonl', '');
+              
+              // Quick peek for name
+              let sessionName = 'Untitled Session';
+              try {
+                const content = fs.readFileSync(filePath, 'utf-8');
+                const firstMsgLine = content.split('\n').find(l => l.trim() && l.includes('"type":"user"'));
+                if (firstMsgLine) {
+                  const entry = JSON.parse(firstMsgLine);
+                  sessionName = typeof entry.content === 'string' ? entry.content : 
+                                (Array.isArray(entry.content) ? entry.content.map((p: any) => p.text || '').join('') : 'Complex Session');
+                  if (sessionName.length > 50) sessionName = sessionName.substring(0, 47) + '...';
+                }
+              } catch (e) {}
+
+              allRecords.push({
+                projectPath,
+                projectName,
+                index: '?', 
+                name: sessionName,
+                time: stats.mtime.toLocaleDateString(),
+                updatedAt: stats.mtime.getTime(),
+                id: uuid
+              });
+            }
+          } catch (e) {}
+        }
+
+        this.sessionCache = allRecords.sort((a, b) => b.updatedAt - a.updatedAt);
+        console.log(`[GeminiService] Cache updated: ${allRecords.length} sessions.`);
       } catch (error) {
-        console.error('[GeminiService] Background scan failed:', error);
+        console.error('[GeminiService] Scan failed:', error);
       } finally {
-        setTimeout(() => scan(), 60000);
+        setTimeout(() => scan(), 30000); // Update every 30s
       }
     };
     scan();
   }
 
   static async getTranscript(uuid: string, projectName: string, limit: number = 20, offset: number = 0): Promise<ChatMessage[]> {
+    if (uuid.startsWith('new-')) return [];
+    
     try {
       const chatDir = path.join(GEMINI_BASE_DIR, 'tmp', projectName, 'chats');
       if (!fs.existsSync(chatDir)) return [];
@@ -107,14 +124,11 @@ export class GeminiService {
         try {
           const entry = JSON.parse(line);
           if ((entry.type === 'user' || entry.type === 'gemini') && entry.content) {
-            // Fix: content can be a string OR an array of parts [{text: "..."}]
             let messageContent = '';
             if (typeof entry.content === 'string') {
               messageContent = entry.content;
             } else if (Array.isArray(entry.content)) {
-              messageContent = entry.content
-                .map((part: any) => part.text || '')
-                .join('');
+              messageContent = entry.content.map((part: any) => part.text || '').join('');
             }
 
             allMessages.push({ 
@@ -135,11 +149,27 @@ export class GeminiService {
     }
   }
 
-  static async deleteSession(index: string, projectPath: string): Promise<void> {
+  static async deleteSession(uuid: string, projectPath: string): Promise<void> {
     try {
-      await execAsync(`gemini --delete-session ${index}`, { cwd: projectPath });
-      this.sessionCache = this.sessionCache.filter(s => !(s.index === index && s.projectPath === projectPath));
+      const { stdout } = await execAsync('gemini --list-sessions', { cwd: projectPath });
+      const lines = stdout.split('\n');
+      const sessionRegex = /^\s*(\d+)\.\s+(.*)\s+\((.*)\)\s+\[(.*)\]/;
+      
+      let indexToDelete: string | null = null;
+      for (const line of lines) {
+        const cleanLine = line.replace(/\x1B\[[0-9;]*[mK]/g, '');
+        const match = cleanLine.match(sessionRegex);
+        if (match && match[4].trim() === uuid) {
+          indexToDelete = match[1];
+          break;
+        }
+      }
+
+      if (indexToDelete) {
+        await execAsync(`gemini --delete-session ${indexToDelete}`, { cwd: projectPath });
+      }
     } catch (error) {
+      console.error(`[GeminiService] deleteSession failed:`, error);
       throw error;
     }
   }

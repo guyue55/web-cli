@@ -28,14 +28,17 @@ export class SessionManager {
       return this.sessions.get(sessionKey)!;
     }
 
-    console.log(`[SessionManager] Resuming Gemini session UUID: ${uuid} at ${projectPath}`);
+    const isNew = uuid.startsWith('new-');
+    console.log(`[SessionManager] ${isNew ? 'Creating NEW' : 'Resuming'} Gemini session at ${projectPath}`);
     
     let ptyProcess: any;
     let useFallback = false;
 
-    // Direct resume using UUID
+    // Command: resume or new
+    const args = isNew ? ['--trust'] : ['--resume', uuid, '--trust'];
+
     try {
-      ptyProcess = pty.spawn('gemini', ['--resume', uuid, '--trust'], {
+      ptyProcess = pty.spawn('gemini', args, {
         name: 'xterm-color',
         cols: 80,
         rows: 24,
@@ -43,12 +46,12 @@ export class SessionManager {
         env: { ...process.env, TERM: 'xterm-256color' } as any
       });
     } catch (err) {
-      console.warn(`[SessionManager] node-pty failed: ${(err as Error).message}. Falling back to child_process.spawn.`);
+      console.warn(`[SessionManager] node-pty failed. Falling back to child_process.spawn.`);
       useFallback = true;
     }
 
     if (useFallback) {
-      const cp = spawn('gemini', ['--resume', uuid, '--trust'], {
+      const cp = spawn('gemini', args, {
         cwd: projectPath,
         env: { ...process.env, TERM: 'xterm-256color' } as any,
         stdio: ['pipe', 'pipe', 'pipe']
@@ -97,7 +100,7 @@ export class SessionManager {
     });
 
     ptyProcess.onExit(({ exitCode }: { exitCode: number }) => {
-      console.log(`[SessionManager] Gemini Session ${uuid} exited with code ${exitCode}`);
+      console.log(`[SessionManager] Session ${uuid} exited with code ${exitCode}`);
       this.sessions.delete(sessionKey);
     });
 

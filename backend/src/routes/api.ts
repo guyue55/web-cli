@@ -41,11 +41,11 @@ apiRouter.get('/history/:uuid/transcript', async (req, res) => {
   }
 });
 
-apiRouter.delete('/history/:index', async (req, res) => {
+apiRouter.delete('/history/:uuid', async (req, res) => {
   const projectPath = req.query.projectPath as string;
   if (!projectPath) return res.status(400).json({ error: 'projectPath is required' });
   try {
-    await GeminiService.deleteSession(req.params.index, projectPath);
+    await GeminiService.deleteSession(req.params.uuid, projectPath);
     res.sendStatus(204);
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });

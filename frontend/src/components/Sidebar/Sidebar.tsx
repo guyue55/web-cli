@@ -2,11 +2,12 @@ import React from 'react';
 import type { HistoryItem, ProjectEntry } from '../../hooks/useSessions';
 
 interface SidebarProps {
-  groupedHistory: Record<string, HistoryItem[]>;
+  groupedHistory: { name: string, items: HistoryItem[] }[];
   activeSessions: string[];
   projects: ProjectEntry[];
   selectedSession: HistoryItem | null;
   onSelectSession: (session: HistoryItem) => void;
+  onNewChat: () => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
   isLoading: boolean;
@@ -20,6 +21,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   projects,
   selectedSession,
   onSelectSession,
+  onNewChat,
   searchQuery,
   onSearchChange,
   isLoading,
@@ -29,17 +31,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <div className={`sidebar-wrapper ${collapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-header">
-        <button className="icon-btn" onClick={onToggle}>☰</button>
-        {!collapsed && <button className="new-chat-btn">＋ New Chat</button>}
+        <button className="icon-btn" onClick={onToggle} title="Toggle Sidebar">☰</button>
+        {!collapsed && (
+          <button className="new-chat-btn" onClick={onNewChat}>
+            <span>＋</span> New Chat
+          </button>
+        )}
       </div>
 
       <div className="session-list-container">
-        {Object.keys(groupedHistory).length === 0 && isLoading ? (
+        {groupedHistory.length === 0 && isLoading ? (
           <div className="skeleton-list">
              {[1,2,3].map(i => <div key={i} className="skeleton-item" style={{ height: 40, margin: 10, borderRadius: 10, backgroundColor: 'var(--bg-hover)' }} />)}
           </div>
-        ) : Object.entries(groupedHistory).map(([projectName, items]) => {
+        ) : groupedHistory.map(({ name: projectName, items }) => {
           const project = projects.find(p => p.name === projectName);
+          const filteredItems = items.filter(item => 
+            item.name.toLowerCase().includes(searchQuery.toLowerCase())
+          );
+
+          if (searchQuery && filteredItems.length === 0) return null;
+
           return (
             <div key={projectName} className="project-group">
               {!collapsed && (
@@ -53,15 +65,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 }}>
                   <span>{projectName}</span>
                   {project?.isScanning && (
-                    <div className="tiny-spinner" style={{ 
-                      width: 8, height: 8, border: '1px solid #444', borderTopColor: '#888', borderRadius: '50%', animation: 'spin 0.5s linear infinite'
-                    }} />
+                    <div className="tiny-spinner" />
                   )}
                 </div>
               )}
               <ul className="session-list">
-                {items.map((item) => {
-                  const isActive = activeSessions.includes(`${item.projectPath}:${item.index}`);
+                {filteredItems.map((item) => {
+                  const isActive = activeSessions.includes(`${item.projectPath}:${item.id}`);
                   return (
                     <li 
                       key={item.id} 
@@ -78,7 +88,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           {isActive && <div className="active-dot" />}
                         </div>
                       )}
-                    </li>                  );
+                    </li>
+                  );
                 })}
               </ul>
             </div>

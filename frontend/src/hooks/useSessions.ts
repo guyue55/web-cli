@@ -6,6 +6,7 @@ export type HistoryItem = {
   index: string;
   name: string;
   time: string;
+  updatedAt: number;
   id: string; // UUID
 };
 
@@ -24,7 +25,6 @@ export function useSessions() {
   useEffect(() => {
     const host = window.location.hostname || 'localhost';
     
-    // 1. Fetch active sessions periodically via HTTP
     const fetchActive = async () => {
       try {
         const res = await fetch(`http://${host}:3001/active-sessions`);
@@ -34,7 +34,6 @@ export function useSessions() {
     fetchActive();
     const interval = setInterval(fetchActive, 10000);
 
-    // 2. Start Discovery via WebSocket for real-time streaming
     const ws = new WebSocket(`ws://${host}:3001/discovery`);
     setIsDiscovering(true);
 
@@ -49,7 +48,6 @@ export function useSessions() {
           break;
         case 'session-found':
           setHistory(prev => {
-            // Avoid duplicates
             if (prev.some(h => h.id === msg.record.id)) return prev;
             return [...prev, msg.record];
           });
@@ -60,7 +58,6 @@ export function useSessions() {
           break;
         case 'discovery-complete':
           setIsDiscovering(false);
-          ws.close();
           break;
       }
     };
@@ -71,25 +68,42 @@ export function useSessions() {
     };
   }, []);
 
-  const groupedHistory = useMemo(() => {
-    // Start with all projects as keys so they show up immediately
-    const acc = projects.reduce((obj, p) => {
-      obj[p.name] = [];
-      return obj;
-    }, {} as Record<string, HistoryItem[]>);
+  const sortedAndGroupedHistory = useMemo(() => {
+    // 1. Group sessions and find latest update for each project
+    const groups: Record<string, { items: HistoryItem[], latestUpdate: number }> = {};
+    
+    // Initialize groups from project list
+    projects.forEach(p => {
+      groups[p.name] = { items: [], latestUpdate: 0 };
+    });
 
-    // Fill with discovered sessions
-    return history.reduce((obj, item) => {
-      if (!obj[item.projectName]) obj[item.projectName] = [];
-      obj[item.projectName].push(item);
-      return obj;
-    }, acc);
+    // Populate and track latest update
+    history.forEach(item => {
+      if (!groups[item.projectName]) {
+        groups[item.projectName] = { items: [], latestUpdate: 0 };
+      }
+      groups[item.projectName].items.push(item);
+      if (item.updatedAt > groups[item.projectName].latestUpdate) {
+        groups[item.projectName].latestUpdate = item.updatedAt;
+      }
+    });
+
+    // 2. Sort sessions within each project (newest first)
+    Object.values(groups).forEach(group => {
+      group.items.sort((a, b) => b.updatedAt - a.updatedAt);
+    });
+
+    // 3. Sort projects themselves by their latest session update
+    return Object.entries(groups)
+      .sort(([, a], [, b]) => b.latestUpdate - a.latestUpdate)
+      .map(([name, group]) => ({ name, items: group.items }));
+
   }, [projects, history]);
 
   return {
     activeSessions,
     projects,
-    groupedHistory,
+    groupedHistory: sortedAndGroupedHistory,
     isDiscovering
   };
 }

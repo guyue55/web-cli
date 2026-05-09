@@ -6,14 +6,16 @@ import '@xterm/xterm/css/xterm.css';
 interface TerminalProps {
   uuid: string;
   projectPath: string;
+  initialPrompt?: string | null;
 }
 
-const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath }) => {
+const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const sentInitialRef = useRef(false);
 
   useEffect(() => {
     if (!terminalRef.current) return;
@@ -38,12 +40,18 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath }) => {
     xtermRef.current = term;
 
     const host = window.location.hostname;
-    // Connect specifying the uuid
     const wsUrl = `ws://${host}:3001?uuid=${uuid}&projectPath=${encodeURIComponent(projectPath)}`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
-    ws.onopen = () => setIsConnected(true);
+    ws.onopen = () => {
+      setIsConnected(true);
+      // Auto-send initial prompt if provided
+      if (initialPrompt && !sentInitialRef.current) {
+        ws.send(JSON.stringify({ type: 'input', data: initialPrompt + '\r' }));
+        sentInitialRef.current = true;
+      }
+    };
     ws.onclose = () => setIsConnected(false);
 
     ws.onmessage = (event) => {
@@ -86,7 +94,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath }) => {
       ws.close();
       term.dispose();
     };
-  }, [uuid, projectPath]);
+  }, [uuid, projectPath, initialPrompt]);
 
   const focusInput = () => {
     if (inputRef.current) inputRef.current.focus();

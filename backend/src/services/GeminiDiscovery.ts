@@ -11,11 +11,12 @@ export interface GeminiSessionRecord {
   index: string;
   name: string;
   time: string;
+  updatedAt: number; // Numeric timestamp for sorting
   id: string; // UUID
 }
 
 /**
- * GeminiDiscovery V6: Fixed name extraction by skipping metadata line and handling part arrays.
+ * GeminiDiscovery V7: Added updatedAt timestamp for sorting.
  */
 export class GeminiDiscovery {
   static async discoverAndStream(ws: WebSocket) {
@@ -34,7 +35,7 @@ export class GeminiDiscovery {
         projects: projectEntries.map(([path, name]) => ({ path, name })) 
       }));
 
-      console.log(`[Discovery] Starting fixed FS scan for ${projectEntries.length} projects`);
+      console.log(`[Discovery] Starting FS scan for sorting...`);
       let totalFound = 0;
 
       for (const [projectPath, projectName] of projectEntries) {
@@ -50,18 +51,13 @@ export class GeminiDiscovery {
             const filePath = path.join(chatDir, file);
             const stats = fs.statSync(filePath);
             
-            // Extract UUID from filename
             const match = file.match(/session-.*-(.*)\.jsonl$/);
             const uuid = match ? match[1] : file.replace('.jsonl', '');
             
-            // Robust Name Extraction:
-            // Line 0 is often metadata. The first user message (Line 1 or later) is the best name.
             let sessionName = 'Untitled Session';
             try {
               const content = fs.readFileSync(filePath, 'utf-8');
               const lines = content.split('\n').filter(l => l.trim());
-              
-              // Look for the first message (skip metadata at index 0)
               for (let i = 1; i < lines.length; i++) {
                 const entry = JSON.parse(lines[i]);
                 if (entry.content) {
@@ -71,7 +67,6 @@ export class GeminiDiscovery {
                   } else if (Array.isArray(entry.content)) {
                     text = entry.content.map((p: any) => p.text || '').join('');
                   }
-                  
                   if (text.trim()) {
                     sessionName = text.trim();
                     if (sessionName.length > 50) sessionName = sessionName.substring(0, 47) + '...';
@@ -86,7 +81,8 @@ export class GeminiDiscovery {
               projectName,
               index: '?', 
               name: sessionName,
-              time: stats.mtime.toLocaleString(),
+              time: stats.mtime.toLocaleDateString() + ' ' + stats.mtime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              updatedAt: stats.mtime.getTime(), // Sortable timestamp
               id: uuid
             };
 
