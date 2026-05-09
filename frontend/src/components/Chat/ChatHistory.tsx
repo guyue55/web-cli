@@ -48,19 +48,25 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
           {transcript.map((msg, i) => (
             <div key={i} className={`chat-bubble ${msg.role}`}>
               <div className="bubble-avatar">
-                {msg.role === 'user' ? 'U' : '✦'}
+                {msg.role === 'user' ? (
+                  <div className="user-avatar-content">U</div>
+                ) : (
+                  <span className="assistant-avatar-icon">✦</span>
+                )}
               </div>
               <div className="bubble-content">
                 {msg.role === 'user' && (
-                   <div className="bubble-label" style={{ marginBottom: 4 }}>You</div>
+                   <div className="bubble-label">您</div>
                 )}
-                {typeof msg.content === 'string' ? (
-                   <ReactMarkdown>{msg.content}</ReactMarkdown>
-                ) : (
-                   <pre>{JSON.stringify(msg.content)}</pre>
-                )}
+                <div className="markdown-body">
+                  {typeof msg.content === 'string' ? (
+                     <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  ) : (
+                     <pre>{JSON.stringify(msg.content, null, 2)}</pre>
+                  )}
+                </div>
                 {msg.timestamp && (
-                   <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 8 }}>
+                   <div className="bubble-timestamp">
                       {formatTime(msg.timestamp)}
                    </div>
                 )}
@@ -69,9 +75,9 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
           ))}
           
           {transcript.length > 0 && (
-            <div className="continue-prompt" style={{ display: 'flex', justifyContent: 'center', marginTop: '80px' }}>
-               <button className="new-chat-btn" style={{ width: 'auto', borderRadius: '24px', padding: '12px 48px' }} onClick={onStartLive}>
-                 继续此对话 →
+            <div className="continue-prompt-container">
+               <button className="continue-interaction-btn" onClick={onStartLive}>
+                 继续对话 →
                </button>
             </div>
           )}

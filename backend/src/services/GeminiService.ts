@@ -133,7 +133,7 @@ export class GeminiService {
 
             allMessages.push({ 
               role: entry.type === 'user' ? 'user' : 'assistant', 
-              content: messageContent, 
+              content: messageContent.trim(), 
               timestamp: entry.timestamp 
             });
           }

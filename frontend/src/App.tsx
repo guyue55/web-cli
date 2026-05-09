@@ -91,7 +91,6 @@ function App() {
         onNewChat={handleNewChat}
         onDeleteSession={handleDeleteSession}
         searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
         isLoading={isDiscovering}
         collapsed={isSidebarCollapsed}
         onToggle={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
@@ -106,25 +105,22 @@ function App() {
           <h1>{selectedSession?.name || 'Gemini'}</h1>
           
           <div className="header-right">
-             <button className="new-chat-btn" style={{ background: '#c2e7ff', color: '#001d35', padding: '10px 24px', borderRadius: '24px', fontSize: 13, border: 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span>💎</span> 升级到 Google AI Plus
-             </button>
-             <button className="theme-toggle" onClick={toggleTheme}>
+             <button className="theme-toggle" onClick={toggleTheme} title="Toggle Theme">
                 {theme === 'dark' ? '☀️' : '🌙'}
              </button>
              {selectedSession && (
-               <div className="header-tabs" style={{ marginLeft: 12 }}>
+               <div className="header-tabs">
                  <button 
                    className={`tab-btn ${!isLiveMode ? 'active' : ''}`}
                    onClick={() => setIsLiveMode(false)}
                  >
-                   对话
+                   历史
                  </button>
                  <button 
                    className={`tab-btn ${isLiveMode ? 'active' : ''}`}
                    onClick={() => setIsLiveMode(true)}
                  >
-                   终端
+                   交互
                  </button>
                </div>
              )}
@@ -156,7 +152,7 @@ function App() {
             <div className="welcome-screen">
                <div className="welcome-icon">✦</div>
                <h2>您好，我是 Gemini</h2>
-               <p style={{ color: 'var(--text-secondary)' }}>请选择一个会话或在下方输入以开始。</p>
+               <p style={{ color: 'var(--text-secondary)' }}>请选择一个项目会话或在下方输入以开始编码。</p>
             </div>
           )}
         </div>

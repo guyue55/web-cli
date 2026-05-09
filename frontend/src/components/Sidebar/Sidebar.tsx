@@ -10,7 +10,6 @@ interface SidebarProps {
   onNewChat: () => void;
   onDeleteSession: (session: HistoryItem) => void;
   searchQuery: string;
-  onSearchChange: (query: string) => void;
   isLoading: boolean;
   collapsed: boolean;
   onToggle: () => void;
@@ -32,7 +31,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <div className={`sidebar-wrapper ${collapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-top">
-        <button className="icon-btn" onClick={onToggle} title="Toggle Sidebar" style={{ marginBottom: 12 }}>☰</button>
+        <button className="icon-btn" onClick={onToggle} title="Toggle Sidebar" style={{ marginBottom: 8 }}>☰</button>
         {!collapsed && (
           <>
             <button className="new-chat-btn" onClick={onNewChat}>
@@ -41,22 +40,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="sidebar-item-static">
               <span>🏠</span> 我的内容
             </div>
-            <div style={{ marginTop: 12, padding: '0 12px', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>笔记本</div>
-            <div className="sidebar-item-static">
-              <span>📖</span> Untitled notebook
-            </div>
-            <div className="sidebar-item-static">
-              <span>＋</span> 新建笔记本
-            </div>
           </>
         )}
       </div>
 
       <div className="sidebar-mid session-list-container">
-        {!collapsed && <div style={{ marginTop: 12, padding: '0 12px', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>最近</div>}
+        {!collapsed && <div style={{ marginTop: 16, padding: '0 12px', fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>最近</div>}
+        
         {groupedHistory.length === 0 && isLoading ? (
           <div className="skeleton-list">
-             {[1,2,3].map(i => <div key={i} className="skeleton-item" style={{ height: 40, margin: 10, borderRadius: 10, backgroundColor: 'var(--bg-hover)' }} />)}
+             {[1,2,3].map(i => <div key={i} className="skeleton-item" style={{ height: 40, margin: '8px 10px', borderRadius: 20, backgroundColor: 'var(--bg-hover)' }} />)}
           </div>
         ) : groupedHistory.map(({ name: projectName, items }) => {
           const project = projects.find(p => p.name === projectName);
@@ -74,7 +67,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   {project?.isScanning && <div className="tiny-spinner" />}
                 </div>
               )}
-              <ul className="session-list">
+              <ul className="session-list" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                 {filteredItems.map((item) => {
                   const isActive = activeSessions.includes(`${item.projectPath}:${item.id}`);
                   return (
@@ -87,7 +80,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       <div className="card-main">
                         {!collapsed && <span className="history-name">{item.name}</span>}
                         {collapsed ? (
-                          <span className="icon">💬</span>
+                          <span style={{ fontSize: 16 }}>💬</span>
                         ) : (
                           <button 
                             className="delete-btn" 
