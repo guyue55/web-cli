@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Terminal from './components/Terminal';
 import { Sidebar } from './components/Sidebar/Sidebar';
 import { ChatHistory } from './components/Chat/ChatHistory';
@@ -15,7 +15,7 @@ function App() {
   const { theme, toggleTheme } = useTheme();
   
   const [isLiveMode, setIsLiveMode] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery] = useState('');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [initialPrompt, setInitialPrompt] = useState<string | null>(null);
 

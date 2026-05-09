@@ -70,12 +70,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <ul className="session-list" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                 {filteredItems.map((item) => {
                   const isActive = activeSessions.includes(`${item.projectPath}:${item.id}`);
+                  // Enhanced title for hover info
+                  const hoverInfo = `${item.name}\n时间: ${item.time}\n路径: ${item.projectPath}`;
+                  
                   return (
                     <li 
                       key={item.id} 
                       className={`session-card ${item.id === selectedSession?.id ? 'active' : ''}`}
                       onClick={() => onSelectSession(item)}
-                      title={item.name}
+                      title={hoverInfo}
                     >
                       <div className="card-main">
                         {!collapsed && <span className="history-name">{item.name}</span>}
@@ -84,7 +87,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         ) : (
                           <button 
                             className="delete-btn" 
-                            title="Delete Session"
+                            title="删除会话"
                             onClick={(e) => {
                                e.stopPropagation();
                                onDeleteSession(item);
@@ -95,10 +98,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         )}
                       </div>
                       
-                      {!collapsed && (
+                      {!collapsed && isActive && (
                         <div className="history-footer">
-                          <span>{item.time}</span>
-                          {isActive && <div className="active-dot" />}
+                          <div className="active-dot" style={{ width: 6, height: 6, backgroundColor: '#10b981', borderRadius: '50%', boxShadow: '0 0 4px #10b981' }} />
                         </div>
                       )}
                     </li>
