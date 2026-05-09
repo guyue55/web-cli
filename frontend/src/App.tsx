@@ -15,7 +15,7 @@ function App() {
   const { theme, toggleTheme } = useTheme();
   
   const [isLiveMode, setIsLiveMode] = useState(false);
-  const [searchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [initialPrompt, setInitialPrompt] = useState<string | null>(null);
 
@@ -27,20 +27,9 @@ function App() {
   };
 
   const handleNewChat = () => {
-    const defaultProject = projects[0] || { path: window.location.pathname, name: 'default' };
-    const newSession: HistoryItem = {
-      id: `new-${Date.now()}`,
-      name: '新对话',
-      projectPath: defaultProject.path,
-      projectName: defaultProject.name,
-      index: '0',
-      time: 'Just now',
-      updatedAt: Date.now()
-    };
-    setSelectedSession(newSession);
-    setIsLiveMode(true);
+    setSelectedSession(null); // Clear selection for a truly "New" state
+    setIsLiveMode(false);
     setInitialPrompt(null);
-    if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
   };
 
   const handlePromptSubmit = (text: string) => {
@@ -75,6 +64,7 @@ function App() {
         onSelectSession={handleSelectSession}
         onNewChat={handleNewChat}
         searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
         isLoading={isDiscovering}
         collapsed={isSidebarCollapsed}
         onToggle={() => setIsSidebarCollapsed(!isSidebarCollapsed)}

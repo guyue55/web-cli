@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import type { ChatMessage } from '../../hooks/useTranscript';
 
@@ -9,6 +9,32 @@ interface ChatHistoryProps {
   onLoadMore: () => void;
   onStartLive: () => void;
 }
+
+const CodeBlock = ({ children, ...props }: any) => {
+  const [copied, setCopied] = useState(false);
+  const textRef = useRef<string>('');
+
+  // Extract text from children
+  React.Children.forEach(children, (child) => {
+    if (typeof child === 'string') textRef.current += child;
+    else if (child?.props?.children) textRef.current += child.props.children;
+  });
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(textRef.current);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="code-block-wrapper">
+      <button className={`copy-button ${copied ? 'copied' : ''}`} onClick={handleCopy}>
+        {copied ? '已复制' : '复制'}
+      </button>
+      <pre {...props}>{children}</pre>
+    </div>
+  );
+};
 
 export const ChatHistory: React.FC<ChatHistoryProps> = ({
   transcript,
@@ -40,7 +66,7 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
       <div className="transcript-container">
         {hasMore && transcript.length > 0 && (
           <div className="load-more-indicator">
-            {isLoading ? '...' : '↑ 加载更多'}
+            {isLoading ? '...' : '↑ 加载历史对话'}
           </div>
         )}
         
@@ -60,7 +86,13 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
                 )}
                 <div className="markdown-body">
                   {typeof msg.content === 'string' ? (
-                     <ReactMarkdown>{msg.content}</ReactMarkdown>
+                     <ReactMarkdown 
+                       components={{
+                         pre: CodeBlock
+                       }}
+                     >
+                       {msg.content}
+                     </ReactMarkdown>
                   ) : (
                      <pre>{JSON.stringify(msg.content, null, 2)}</pre>
                   )}
@@ -77,7 +109,7 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
           {transcript.length > 0 && (
             <div className="continue-prompt-container">
                <button className="continue-interaction-btn" onClick={onStartLive}>
-                 继续对话 →
+                 进入实时交互终端 →
                </button>
             </div>
           )}
