@@ -48,7 +48,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <div className={`sidebar-wrapper ${collapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-top">
-        <button className="icon-btn sidebar-toggle-btn" onClick={onToggle} title="Toggle Sidebar">☰</button>
+        <button className="sidebar-toggle-btn" onClick={onToggle} title="Toggle Sidebar">☰</button>
         {!collapsed && (
           <>
             <button className="new-chat-btn-official" onClick={onNewChat}>
@@ -63,13 +63,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
               />
+              {searchQuery && (
+                <button 
+                  className="search-clear-btn" 
+                  onClick={() => onSearchChange('')}
+                  title="清空搜索"
+                >
+                  ×
+                </button>
+              )}
             </div>
           </>
         )}
       </div>
 
       <div className="sidebar-mid session-list-container">
-        {!collapsed && <div style={{ marginTop: 8, padding: '0 12px', fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>最近</div>}
+        {!collapsed && <div style={{ marginTop: 8, padding: '0 16px', fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>最近</div>}
         
         {groupedHistory.length === 0 && isLoading ? (
           <div className="skeleton-list">
@@ -83,8 +92,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           if (searchQuery && filteredItems.length === 0) return null;
 
-          // If not in collapsedProjects yet, default to collapsed (true)
-          const isProjectCollapsed = collapsedProjects[projectName] !== false;
+          const anyActive = filteredItems.some(item => 
+            activeSessions.includes(`${item.projectPath}:${item.id}`)
+          );
+
+          const isProjectCollapsed = searchQuery ? false : (collapsedProjects[projectName] !== false);
 
           return (
             <div key={projectName} className="project-group">
@@ -94,39 +106,49 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   onClick={() => toggleProject(projectName)}
                   title={`路径: ${project?.path || 'N/A'}`}
                 >
-                  <span className="chevron-icon">›</span>
                   <span className="project-icon">📁</span>
                   <span className="project-name-text">{projectName}</span>
-                  {project?.isScanning && <div className="tiny-spinner" />}
+                  
+                  <div className="project-meta-indicators">
+                    {anyActive && isProjectCollapsed && (
+                      <span className="active-status-dot-mini" />
+                    )}
+                    <span className="session-count-badge">{filteredItems.length}</span>
+                    <span className="chevron-icon">▼</span>
+                  </div>
                 </div>
               )}
               
-              {!isProjectCollapsed && !collapsed && (
-                <ul className="session-list" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                  {filteredItems.map((item) => {
-                    const isActive = activeSessions.includes(`${item.projectPath}:${item.id}`);
-                    const hoverInfo = `标题: ${item.name}\n时间: ${item.time}\n项目: ${item.projectName}\n路径: ${item.projectPath}`;
-                    
-                    return (
-                      <li 
-                        key={item.id} 
-                        className={`session-card ${item.id === selectedSession?.id ? 'active' : ''}`}
-                        onClick={() => onSelectSession(item)}
-                        title={hoverInfo}
-                      >
-                        <div className="card-main">
-                          <span className="history-name">{item.name}</span>
-                        </div>
+              {!collapsed && (
+                <div className={`project-session-container ${isProjectCollapsed ? 'is-collapsed' : ''}`}>
+                  <div className="project-session-inner">
+                    <ul className="session-list">
+                      {filteredItems.map((item) => {
+                        const isActive = activeSessions.includes(`${item.projectPath}:${item.id}`);
+                        const hoverInfo = `标题: ${item.name}\n时间: ${item.time}\n项目: ${item.projectName}\n路径: ${item.projectPath}`;
                         
-                        {isActive && (
-                          <div className="history-footer">
-                            <div className="active-dot" style={{ width: 6, height: 6, backgroundColor: '#10b981', borderRadius: '50%', boxShadow: '0 0 4px #10b981' }} />
-                          </div>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
+                        return (
+                          <li 
+                            key={item.id} 
+                            className={`session-card ${item.id === selectedSession?.id ? 'active' : ''}`}
+                            onClick={() => onSelectSession(item)}
+                            title={hoverInfo}
+                          >
+                            <div className="card-main">
+                              <span className="history-name">{item.name}</span>
+                            </div>
+                            
+                            {isActive && (
+                              <div className="history-footer">
+                                <div className="active-dot" style={{ width: 6, height: 6, backgroundColor: '#10b981', borderRadius: '50%', boxShadow: '0 0 4px #10b981' }} />
+                              </div>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                </div>
               )}
 
               {collapsed && (
