@@ -8,7 +8,6 @@ interface SidebarProps {
   selectedSession: HistoryItem | null;
   onSelectSession: (session: HistoryItem) => void;
   onNewChat: () => void;
-  onDeleteSession: (session: HistoryItem) => void;
   searchQuery: string;
   isLoading: boolean;
   collapsed: boolean;
@@ -22,7 +21,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   selectedSession,
   onSelectSession,
   onNewChat,
-  onDeleteSession,
   searchQuery,
   isLoading,
   collapsed,
@@ -63,7 +61,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div key={projectName} className="project-group">
               {!collapsed && (
                 <div className="project-label">
-                  <span>{projectName}</span>
+                  <span className="project-icon">📁</span>
+                  <span className="project-name-text">{projectName}</span>
                   {project?.isScanning && <div className="tiny-spinner" />}
                 </div>
               )}

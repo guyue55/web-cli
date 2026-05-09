@@ -65,21 +65,6 @@ function App() {
     setIsLiveMode(true);
   };
 
-  const handleDeleteSession = async (item: HistoryItem) => {
-    if (!window.confirm(`确认删除会话 "${item.name}"?`)) return;
-    try {
-      const host = window.location.hostname || 'localhost';
-      const res = await fetch(`http://${host}:3001/history/${item.index}?projectPath=${encodeURIComponent(item.projectPath)}`, {
-        method: 'DELETE'
-      });
-      if (res.ok) {
-        if (selectedSession?.id === item.id) setSelectedSession(null);
-      }
-    } catch (e) {
-      console.error('Failed to delete session', e);
-    }
-  };
-
   return (
     <div className="app-container">
       <Sidebar 
@@ -89,7 +74,6 @@ function App() {
         selectedSession={selectedSession}
         onSelectSession={handleSelectSession}
         onNewChat={handleNewChat}
-        onDeleteSession={handleDeleteSession}
         searchQuery={searchQuery}
         isLoading={isDiscovering}
         collapsed={isSidebarCollapsed}
