@@ -62,7 +62,7 @@ export class SessionManager {
 
       cp.stdout?.on('data', (data) => onDataCb(data.toString()));
       cp.stderr?.on('data', (data) => onDataCb(data.toString()));
-      cp.on('exit', (code, signal) => onExitCb({ exitCode: code ?? 0, signal: signal ? 1 : undefined }));
+      cp.on('exit', (code, signal) => onExitCb({ exitCode: code ?? 0, signal: signal ? 1 : undefined as any }));
 
       ptyProcess = {
         write: (data: string) => {

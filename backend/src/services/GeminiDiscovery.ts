@@ -55,44 +55,55 @@ export class GeminiDiscovery {
             let uuid = '';
             let sessionName = 'Untitled Session';
             try {
-              const content = fs.readFileSync(filePath, 'utf-8');
-              const lines = content.split('\n');
+              // Read only the first 2KB for UUID and name to be efficient
+              const fd = fs.openSync(filePath, 'r');
+              const buffer = Buffer.alloc(2048);
+              const bytesRead = fs.readSync(fd, buffer, 0, 2048, 0);
+              fs.closeSync(fd);
+              
+              const contentPrefix = buffer.toString('utf-8', 0, bytesRead);
+              const lines = contentPrefix.split('\n');
               
               // 1. Get full UUID from first line
               if (lines[0]) {
-                const firstEntry = JSON.parse(lines[0]);
-                uuid = firstEntry.sessionId || '';
+                try {
+                  const firstEntry = JSON.parse(lines[0]);
+                  uuid = firstEntry.sessionId || '';
+                } catch (e) {}
               }
 
-              // Fallback to filename parsing if content is corrupted
+              // Fallback to filename parsing if content is corrupted or UUID missing
               if (!uuid) {
                 const match = file.match(/session-.*-(.*)\.jsonl$/);
-                uuid = match ? match[1] : file.replace('.jsonl', '');
+                uuid = (match ? match[1] : null) || file.replace('.jsonl', '');
               }
 
-              // 2. Find first user message for session name
+              // 2. Find first user message for session name (look in the prefix first)
               for (let i = 1; i < lines.length; i++) {
-                if (!lines[i].trim()) continue;
-                const entry = JSON.parse(lines[i]);
-                if (entry.type === 'user' && entry.content) {
-                  let text = '';
-                  if (typeof entry.content === 'string') {
-                    text = entry.content;
-                  } else if (Array.isArray(entry.content)) {
-                    text = entry.content.map((p: any) => p.text || '').join('');
+                const line = lines[i];
+                if (!line || !line.trim()) continue;
+                try {
+                  const entry = JSON.parse(line);
+                  if (entry.type === 'user' && entry.content) {
+                    let text = '';
+                    if (typeof entry.content === 'string') {
+                      text = entry.content;
+                    } else if (Array.isArray(entry.content)) {
+                      text = entry.content.map((p: any) => p.text || '').join('');
+                    }
+                    if (text.trim()) {
+                      sessionName = text.trim();
+                      if (sessionName.length > 50) sessionName = sessionName.substring(0, 47) + '...';
+                      break; 
+                    }
                   }
-                  if (text.trim()) {
-                    sessionName = text.trim();
-                    if (sessionName.length > 50) sessionName = sessionName.substring(0, 47) + '...';
-                    break; 
-                  }
-                }
+                } catch (e) {}
               }
             } catch (e) {
               // Last resort fallback
               if (!uuid) {
                 const match = file.match(/session-.*-(.*)\.jsonl$/);
-                uuid = match ? match[1] : file.replace('.jsonl', '');
+                uuid = (match ? match[1] : null) || file.replace('.jsonl', '');
               }
             }
 

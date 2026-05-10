@@ -66,30 +66,41 @@ export class GeminiService {
               let uuid = '';
               let sessionName = 'Untitled Session';
               try {
-                const content = fs.readFileSync(filePath, 'utf-8');
-                const firstLine = content.split('\n')[0];
-                if (firstLine) {
-                  const firstEntry = JSON.parse(firstLine);
-                  uuid = firstEntry.sessionId || '';
+                // Read only the first 2KB for efficiency
+                const fd = fs.openSync(filePath, 'r');
+                const buffer = Buffer.alloc(2048);
+                const bytesRead = fs.readSync(fd, buffer, 0, 2048, 0);
+                fs.closeSync(fd);
+                
+                const contentPrefix = buffer.toString('utf-8', 0, bytesRead);
+                const lines = contentPrefix.split('\n');
+
+                if (lines[0]) {
+                  try {
+                    const firstEntry = JSON.parse(lines[0]);
+                    uuid = firstEntry.sessionId || '';
+                  } catch (e) {}
                 }
 
                 // If UUID extraction failed from first line, fallback to filename logic
                 if (!uuid) {
                   const match = file.match(/session-.*-(.*)\.jsonl$/);
-                  uuid = match ? match[1] : file.replace('.jsonl', '');
+                  uuid = (match ? match[1] : null) || file.replace('.jsonl', '');
                 }
 
-                const firstMsgLine = content.split('\n').find(l => l.trim() && l.includes('"type":"user"'));
+                const firstMsgLine = lines.find(l => l && l.trim() && l.includes('"type":"user"'));
                 if (firstMsgLine) {
-                  const entry = JSON.parse(firstMsgLine);
-                  sessionName = typeof entry.content === 'string' ? entry.content : 
-                                (Array.isArray(entry.content) ? entry.content.map((p: any) => p.text || '').join('') : 'Complex Session');
-                  if (sessionName.length > 50) sessionName = sessionName.substring(0, 47) + '...';
+                  try {
+                    const entry = JSON.parse(firstMsgLine);
+                    sessionName = typeof entry.content === 'string' ? entry.content : 
+                                  (Array.isArray(entry.content) ? entry.content.map((p: any) => p.text || '').join('') : 'Complex Session');
+                    if (sessionName.length > 50) sessionName = sessionName.substring(0, 47) + '...';
+                  } catch (e) {}
                 }
               } catch (e) {
                 if (!uuid) {
                   const match = file.match(/session-.*-(.*)\.jsonl$/);
-                  uuid = match ? match[1] : file.replace('.jsonl', '');
+                  uuid = (match ? match[1] : null) || file.replace('.jsonl', '');
                 }
               }
 
@@ -174,8 +185,8 @@ export class GeminiService {
       for (const line of lines) {
         const cleanLine = line.replace(/\x1B\[[0-9;]*[mK]/g, '');
         const match = cleanLine.match(sessionRegex);
-        if (match && match[4].trim() === uuid) {
-          indexToDelete = match[1];
+        if (match && match[4] && match[4].trim() === uuid) {
+          indexToDelete = match[1] || null;
           break;
         }
       }

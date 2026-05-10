@@ -20,7 +20,7 @@ setupWebSocket(wss);
 
 const PORT = process.env.PORT || 3001;
 
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(Number(PORT), '0.0.0.0', () => {
   console.log(`Global Gemini Session Manager listening on http://0.0.0.0:${PORT}`);
   GeminiService.startBackgroundScanner(); // Background scanning
 });
