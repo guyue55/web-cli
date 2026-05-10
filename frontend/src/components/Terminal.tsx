@@ -10,6 +10,15 @@ interface TerminalProps {
   theme?: string;
 }
 
+// Premium SVG Icons
+const IconInterrupt = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>;
+const IconClear = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h8c1 0 2 1 2 2v2"></path></svg>;
+const IconCopy = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>;
+const IconCheck = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>;
+const IconDownload = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>;
+const IconRefresh = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>;
+const IconKeyboard = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><path d="M6 8h.01"></path><path d="M10 8h.01"></path><path d="M14 8h.01"></path><path d="M18 8h.01"></path><path d="M6 12h.01"></path><path d="M10 12h.01"></path><path d="M14 12h.01"></path><path d="M18 12h.01"></path><path d="M7 16h10"></path></svg>;
+
 const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, theme }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -166,28 +175,28 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
            <span className={`status-dot-inner ${connectionStatus}`} />
            <span>
              {connectionStatus === 'connected' ? '已连接' : 
-              connectionStatus === 'connecting' ? '正在连接...' : '连接已断开'}
+              connectionStatus === 'connecting' ? '启动中' : '已断开'}
            </span>
         </div>
         
         <div className="toolbar-actions">
            <button className="terminal-action-btn" title="中断 (Ctrl+C)" onClick={handleInterrupt}>
-             <span className="icon-span">🚫</span>
+             <span className="icon-span"><IconInterrupt /></span>
            </button>
            <button className="terminal-action-btn" title="清屏" onClick={handleClear}>
-             <span className="icon-span">🧹</span>
+             <span className="icon-span"><IconClear /></span>
            </button>
-           <button className="terminal-action-btn" title="复制全屏" onClick={handleCopy}>
-             <span className="icon-span">{copyFeedback ? '✅' : '📋'}</span>
+           <button className="terminal-action-btn" title="复制内容" onClick={handleCopy}>
+             <span className="icon-span">{copyFeedback ? <IconCheck /> : <IconCopy />}</span>
            </button>
            <button className="terminal-action-btn" title="导出日志" onClick={handleDownload}>
-             <span className="icon-span">💾</span>
+             <span className="icon-span"><IconDownload /></span>
            </button>
            <button className="terminal-action-btn" title="重新连接" onClick={connect}>
-             <span className="icon-span">🔄</span>
+             <span className="icon-span"><IconRefresh /></span>
            </button>
            <button className="terminal-action-btn mobile-keyboard-btn" title="呼起键盘" onClick={() => inputRef.current?.focus()}>
-             <span className="icon-span">⌨️</span>
+             <span className="icon-span"><IconKeyboard /></span>
            </button>
         </div>
       </div>
@@ -201,7 +210,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
                  <h3>终端已离线</h3>
                  <p>交互实例已停止响应，可能是由于长时间闲置或网络问题。</p>
                  <button className="reconnect-btn-premium" onClick={connect}>
-                   <span className="icon-span">🔄</span> 重新启动实例
+                   <span className="icon-span"><IconRefresh /></span> 重新启动实例
                  </button>
               </div>
            </div>
