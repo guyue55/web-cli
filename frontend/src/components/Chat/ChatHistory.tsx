@@ -10,17 +10,23 @@ interface ChatHistoryProps {
   onStartLive: () => void;
 }
 
-const CodeBlock = ({ children, ...props }: any) => {
+const CodeBlock = ({ children, ...props }: React.ComponentPropsWithoutRef<'pre'>) => {
   const [copied, setCopied] = useState(false);
-  const textRef = useRef<string>('');
-
+  
+  let textContent = '';
   React.Children.forEach(children, (child) => {
-    if (typeof child === 'string') textRef.current += child;
-    else if (child?.props?.children) textRef.current += child.props.children;
+    if (typeof child === 'string') textContent += child;
+    else if (React.isValidElement(child) && child.props) {
+      // @ts-expect-error - children might exist on props but TS doesn't know
+      if (child.props.children) {
+        // @ts-expect-error - same as above
+        textContent += String(child.props.children);
+      }
+    }
   });
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(textRef.current);
+    navigator.clipboard.writeText(textContent);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -63,12 +69,12 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
     try {
       const date = new Date(ts);
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } catch (e) {
+    } catch {
       return '';
     }
   };
 
-  const copyFullMessage = (content: any) => {
+  const copyFullMessage = (content: unknown) => {
     const text = typeof content === 'string' ? content : JSON.stringify(content);
     navigator.clipboard.writeText(text);
     alert('消息已复制到剪贴板');

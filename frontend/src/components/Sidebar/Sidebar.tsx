@@ -47,20 +47,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <div className={`sidebar-wrapper ${collapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-top">
-        <button className="sidebar-toggle-btn" onClick={onToggle} title="Toggle Sidebar">☰</button>
+        <button className="sidebar-toggle-btn" onClick={onToggle} title="Toggle Sidebar">
+          <span className="material-symbols-outlined">menu</span>
+        </button>
 
         <button 
           className={`new-chat-btn-official ${collapsed ? 'is-mini' : ''}`} 
           onClick={onNewChat}
           title={collapsed ? "发起新对话" : undefined}
         >
-          <span className="plus-icon">＋</span>
+          <span className="material-symbols-outlined plus-icon">add</span>
           {!collapsed && <span>发起新对话</span>}
         </button>
 
         {!collapsed && (
           <div className="sidebar-search-container">
-            <span className="search-icon">🔍</span>
+            <span className="material-symbols-outlined search-icon" style={{ fontSize: 20 }}>search</span>
             <input 
               type="text" 
               className="sidebar-search-input" 
@@ -74,7 +76,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 onClick={() => onSearchChange('')}
                 title="清空搜索"
               >
-                ×
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>close</span>
               </button>
             )}
           </div>
@@ -110,7 +112,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   onClick={() => toggleProject(projectName)}
                   title={`路径: ${project?.path || 'N/A'}`}
                 >
-                  <span className="project-icon">📁</span>
+                  <span className="material-symbols-outlined project-icon" style={{ fontSize: 18 }}>folder</span>
                   <span className="project-name-text">{projectName}</span>
                   
                   <div className="project-meta-indicators">
@@ -118,7 +120,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       <span className="active-status-dot-mini" />
                     )}
                     <span className="session-count-badge">{filteredItems.length}</span>
-                    <span className="chevron-icon">▼</span>
+                    <span className="material-symbols-outlined chevron-icon" style={{ fontSize: 16 }}>expand_more</span>
                   </div>
                 </div>
               )}
@@ -158,7 +160,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {collapsed && (
                 <div className="collapsed-project-indicator" title={`${projectName}${anyActive ? ' (有活动会话)' : ''}`}>
                    <div style={{ position: 'relative', display: 'inline-block' }}>
-                     📁
+                     <span className="material-symbols-outlined">folder</span>
                      {anyActive && <span className="active-status-dot-mini" style={{ position: 'absolute', top: -2, right: -2 }} />}
                    </div>
                 </div>
@@ -170,15 +172,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       <div className="sidebar-bottom">
           <div className="sidebar-item-static" title="帮助">
-             <span className="icon-span">❓</span>
+             <span className="icon-span"><span className="material-symbols-outlined">help</span></span>
              {!collapsed && <span>帮助</span>}
           </div>
           <div className="sidebar-item-static" title="活动">
-             <span className="icon-span">⏳</span>
+             <span className="icon-span"><span className="material-symbols-outlined">history</span></span>
              {!collapsed && <span>活动</span>}
           </div>
           <div className="sidebar-item-static" title="设置">
-             <span className="icon-span">⚙️</span>
+             <span className="icon-span"><span className="material-symbols-outlined">settings</span></span>
              {!collapsed && <span>设置</span>}
           </div>
       </div>

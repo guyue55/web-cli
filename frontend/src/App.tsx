@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import Terminal from './components/Terminal';
+import Terminal from './components/Terminal/Terminal';
 import { Sidebar } from './components/Sidebar/Sidebar';
 import { ChatHistory } from './components/Chat/ChatHistory';
 import { PromptBox } from './components/PromptBox/PromptBox';
@@ -86,7 +86,10 @@ function App() {
       <div className="main-content">
         <header className="header">
           <div className="header-left">
-             <span className="brand-logo">Gemini</span>
+             <span className="brand-logo">
+               Gemini
+               <span className="material-symbols-outlined sparkles-icon">sparkles</span>
+             </span>
           </div>
           
           <div className="header-center">
@@ -94,8 +97,10 @@ function App() {
           </div>
           
           <div className="header-right">
-             <button className="theme-toggle" onClick={toggleTheme} title="Toggle Theme">
-                {theme === 'dark' ? '☀️' : '🌙'}
+             <button className="theme-toggle" onClick={toggleTheme} title="切换主题">
+                <span className="material-symbols-outlined">
+                   {theme === 'dark' ? 'light_mode' : 'dark_mode'}
+                </span>
              </button>
              {selectedSession && (
                <div className="header-tabs">

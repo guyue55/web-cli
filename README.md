@@ -58,8 +58,8 @@ npm run dev
 .
 ├── backend/            # 后端服务代码 (PTY 逻辑, WebSocket, API)
 ├── frontend/           # 前端 UI 代码 (React, xterm.js)
-├── DESIGN.md           # 详细设计文档
-└── API.md              # 接口说明文档
+├── docs/               # 项目文档与设计图 (DESIGN.md, API.md)
+└── README.md
 ```
 
 ## 🔒 安全建议

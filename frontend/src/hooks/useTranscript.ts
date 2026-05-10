@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { HistoryItem } from './useSessions';
 
 export interface ChatMessage {
@@ -12,8 +12,16 @@ export function useTranscript(selectedSession: HistoryItem | null) {
   const [isLoading, setIsLoading] = useState(false);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  const [prevSessionId, setPrevSessionId] = useState<string | undefined>();
 
-  const loadTranscript = async (session: HistoryItem, currentOffset: number, append: boolean = false) => {
+  if (selectedSession?.id !== prevSessionId) {
+    setPrevSessionId(selectedSession?.id);
+    setOffset(0);
+    setTranscript([]);
+    setHasMore(true);
+  }
+
+  const loadTranscript = useCallback(async (session: HistoryItem, currentOffset: number, append: boolean = false) => {
     if (isLoading && !append) return;
     setIsLoading(true);
     try {
@@ -40,24 +48,21 @@ export function useTranscript(selectedSession: HistoryItem | null) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [isLoading]);
 
   useEffect(() => {
     if (selectedSession) {
-      setOffset(0);
-      setTranscript([]);
-      setHasMore(true);
-      loadTranscript(selectedSession, 0);
-    } else {
-      setTranscript([]);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      loadTranscript(selectedSession, 0).catch(console.error);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSession?.id]);
 
   const loadMore = () => {
     if (hasMore && !isLoading && selectedSession) {
       const newOffset = offset + 20;
       setOffset(newOffset);
-      loadTranscript(selectedSession, newOffset, true);
+      loadTranscript(selectedSession, newOffset, true).catch(console.error);
     }
   };
 

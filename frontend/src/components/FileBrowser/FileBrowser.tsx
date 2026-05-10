@@ -10,23 +10,23 @@ const FileBrowser: React.FC = () => {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [currentPath, setCurrentPath] = useState<string>('');
 
-  useEffect(() => {
-    fetchFiles();
-  }, [currentPath]);
-
   const fetchFiles = async () => {
     try {
-      const host = window.location.hostname;
+      const host = window.location.hostname || 'localhost';
       const url = currentPath 
         ? `http://${host}:3001/files?path=${encodeURIComponent(currentPath)}` 
         : `http://${host}:3001/files`;
       const response = await fetch(url);
       const data = await response.json();
       setFiles(data);
-    } catch (e) {
-      console.error('Failed to fetch files', e);
-    }
+    } catch { /* ignore */ }
   };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchFiles();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPath]);
 
   const handleFileClick = (file: FileItem) => {
     if (file.isDirectory) {

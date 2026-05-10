@@ -34,14 +34,15 @@ const IconShrink = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="n
 const IconArrowDown = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M7 13l5 5 5-5M7 6l5 5 5-5"/></svg>;
 
 // --- Helper Utilities ---
-const stripAnsi = (str: string) => str.replace(/[\u001b\u009b][[()#;?]*(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d\/#&.:=?%@~]*)*)?\u0007/g, '');
+// eslint-disable-next-line no-control-regex
+const stripAnsi = (str: string) => str.replace(/[\u001b\u009b][[()#;?]*(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d/#&.:=?%@~]*)*)?\u0007/g, '');
 
 const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, theme }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  
+
   const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
   const [systemError, setSystemError] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
@@ -50,8 +51,9 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
   const [isPulseActive, setIsPulseActive] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const reconnectAttemptsRef = useRef(0);
-  const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const executionLockedRef = useRef<string | null>(null);
+  const connectRef = useRef<() => void>(() => {});
   const maxReconnectAttempts = 5;
 
   useEffect(() => {
@@ -78,7 +80,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       wsRef.current.close();
     }
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-    
+
     setStatus('connecting');
     setSystemError(null);
 
@@ -99,10 +101,29 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
           xtermRef.current.focus();
         }
       }, 200);
-      
-      // ... executionLocked logic ...
+
+      // Reliable execution warmup
+      if (initialPrompt && executionLockedRef.current !== `${uuid}-${initialPrompt}`) {
+        setTimeout(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'input', data: initialPrompt + '\r' }));
+            executionLockedRef.current = `${uuid}-${initialPrompt}`;
+          }
+        }, 800);
+      } else if (!initialPrompt) {
+        // Force interactive shell if no initial prompt
+        setTimeout(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'input', data: '\r' }));
+          }
+        }, 500);
+      }
+      setTimeout(() => {
+        xtermRef.current?.focus();
+        fitAddonRef.current?.fit();
+      }, 100);
     };
-    
+
     ws.onclose = (event) => {
       setStatus('disconnected');
       // Exponential Backoff Reconnection Logic (Only if not a manual/graceful close)
@@ -111,20 +132,20 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
         console.log(`[Terminal] Connection lost. Retrying in ${delay}ms... (Attempt ${reconnectAttemptsRef.current + 1})`);
         reconnectTimerRef.current = setTimeout(() => {
           reconnectAttemptsRef.current += 1;
-          connect();
+          connectRef.current();
         }, delay);
       }
     };
-    
+
     ws.onerror = () => setStatus('disconnected');
-    
+
     ws.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
         if (payload.type === 'output' && xtermRef.current) {
           const term = xtermRef.current;
           const isAtBottom = term.buffer.active.viewportY >= term.buffer.active.baseY - 1;
-          
+
           const rawData = payload.data;
           term.write(rawData);
 
@@ -132,7 +153,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
             const cleanMsg = stripAnsi(rawData).replace(/\[(System|Critical) Error\]/, '').trim();
             setSystemError(cleanMsg);
           }
-          
+
           if (isAtBottom) {
             term.scrollToBottom();
           }
@@ -142,10 +163,13 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
         } else if (payload.type === 'exit') {
           setStatus('disconnected');
         }
-      } catch (e) {}
+      } catch { /* ignore */ }
     };
   }, [uuid, projectPath, initialPrompt]);
 
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
   useEffect(() => {
     if (!terminalRef.current) return;
 
@@ -179,7 +203,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
 
     const ro = new ResizeObserver(() => {
       if (xtermRef.current) {
-        try { fitAddon.fit(); } catch(e) {}
+        try { fitAddon.fit(); } catch { /* ignore */ }
       }
     });
     ro.observe(terminalRef.current);
@@ -207,12 +231,14 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     const handleContainerClick = () => {
       term.focus();
     };
-    terminalRef.current.addEventListener('click', handleContainerClick);
+    
+    const termNode = terminalRef.current;
+    termNode.addEventListener('click', handleContainerClick);
 
     return () => {
       ro.disconnect();
-      if (terminalRef.current) {
-        terminalRef.current.removeEventListener('click', handleContainerClick);
+      if (termNode) {
+        termNode.removeEventListener('click', handleContainerClick);
       }
       if (wsRef.current) {
         wsRef.current.onclose = null;

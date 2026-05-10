@@ -20,7 +20,7 @@ export function useSessions() {
   const [activeSessions, setActiveSessions] = useState<string[]>([]);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
-  const [isDiscovering, setIsDiscovering] = useState(false);
+  const [isDiscovering, setIsDiscovering] = useState(true);
 
   useEffect(() => {
     const host = window.location.hostname || 'localhost';
@@ -29,19 +29,18 @@ export function useSessions() {
       try {
         const res = await fetch(`http://${host}:3001/active-sessions`);
         if (res.ok) setActiveSessions(await res.json());
-      } catch (e) {}
+      } catch { /* ignore */ }
     };
     fetchActive();
     const interval = setInterval(fetchActive, 10000);
 
     const ws = new WebSocket(`ws://${host}:3001/discovery`);
-    setIsDiscovering(true);
 
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
       switch (msg.type) {
         case 'project-list':
-          setProjects(msg.projects.map((p: any) => ({ ...p, isScanning: false })));
+          setProjects(msg.projects.map((p: { path: string; name: string }) => ({ ...p, isScanning: false })));
           break;
         case 'project-scanning':
           setProjects(prev => prev.map(p => p.name === msg.projectName ? { ...p, isScanning: true } : p));
