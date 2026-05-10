@@ -38,7 +38,6 @@ const stripAnsi = (str: string) => str.replace(/[\u001b\u009b][[()#;?]*(?:[a-zA-
 
 const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, theme }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -66,6 +65,15 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
 
     ws.onopen = () => {
       setStatus('connected');
+      // Force initial size sync to backend
+      setTimeout(() => {
+        if (ws.readyState === WebSocket.OPEN && xtermRef.current) {
+          ws.send(JSON.stringify({ type: 'resize', cols: 100, rows: 30 }));
+          fitAddonRef.current?.fit();
+          xtermRef.current.focus();
+        }
+      }, 100);
+
       // Reliable execution warmup
       if (initialPrompt && executionLockedRef.current !== `${uuid}-${initialPrompt}`) {
         setTimeout(() => {
@@ -140,6 +148,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       allowProposedApi: true,
       scrollback: 10000,
       cursorStyle: 'block',
+      convertEol: true, // Crucial for handle \n to \r\n correctly
     });
     
     const fitAddon = new FitAddon();
@@ -332,20 +341,6 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
               </div>
            </div>
         )}
-
-        <input ref={inputRef} type="text" className="hidden-input-gemini" 
-          autoCapitalize="none" autoComplete="off" spellCheck="false"
-          onChange={(e) => {
-            const v = e.target.value;
-            if (v && wsRef.current?.readyState === WebSocket.OPEN) {
-              wsRef.current.send(JSON.stringify({ type: 'input', data: v }));
-              e.target.value = '';
-            }
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.send(JSON.stringify({ type: 'input', data: '\r' }));
-          }}
-        />
       </div>
     </div>
   );

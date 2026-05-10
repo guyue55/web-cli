@@ -56,16 +56,48 @@ export class SessionManager {
     }
 
     if (useFallback) {
-      // Use Python's pty module as a powerful bridge to get a real TTY
-      // This solves the "--prompt-interactive cannot be used when input is piped" error
+      // Robust Python PTY Bridge with explicit window size and flush logic
       const pyArgs = isNew ? 
         ['--skip-trust', '--approval-mode', 'yolo', '--prompt-interactive', ' '] : 
         ['--resume', uuid, '--skip-trust', '--approval-mode', 'yolo', '--prompt-interactive', ' '];
       
-      const pyScript = `import pty, sys; pty.spawn([r'${geminiPath}'] + ${JSON.stringify(pyArgs)})`;
+      const pyScript = `
+import pty, os, sys, termios, struct, fcntl
+
+def set_size(fd):
+    # Set terminal size to 30 rows, 100 cols
+    size = struct.pack("HHHH", 30, 100, 0, 0)
+    fcntl.ioctl(fd, termios.TIOCSWINSZ, size)
+
+def spawn_process():
+    os.environ['TERM'] = 'xterm-256color'
+    os.environ['COLUMNS'] = '100'
+    os.environ['LINES'] = '30'
+    
+    # Use pty.fork to have more control over the child's environment
+    pid, fd = pty.fork()
+    if pid == 0: # Child
+        os.execv(r'${geminiPath}', [r'${geminiPath}'] + ${JSON.stringify(pyArgs)})
+    else: # Parent
+        set_size(fd)
+        try:
+            while True:
+                # Direct data transfer between pipes and PTY
+                data = os.read(fd, 1024)
+                if not data: break
+                os.write(sys.stdout.fileno(), data)
+                sys.stdout.flush()
+        except EOFError:
+            pass
+        except Exception:
+            pass
+
+if __name__ == "__main__":
+    spawn_process()
+`.trim();
       
-      console.log(`[SessionManager] Spawning via Python PTY Bridge...`);
-      const cp = spawn('python3', ['-c', pyScript], {
+      console.log(`[SessionManager] Spawning via Robust Python PTY Bridge...`);
+      const cp = spawn('/usr/bin/python3', ['-u', '-c', pyScript], { // -u for unbuffered binary I/O
         cwd: projectPath,
         env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor', FORCE_COLOR: '1' } as any,
         stdio: ['pipe', 'pipe', 'pipe']

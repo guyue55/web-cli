@@ -1343,12 +1343,6 @@ body, html, #root {
   100% { opacity: 1; }
 }
 
-.hidden-input-gemini {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
 .overlay-card-gemini.error-border {
   border: 1px solid rgba(234, 67, 53, 0.4);
 }
