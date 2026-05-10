@@ -121,7 +121,7 @@ function App() {
           </div>
         </header>
 
-        <div className="content-area">
+        <div className={`content-area ${isLiveMode ? 'live-mode' : ''}`}>
           {selectedSession ? (
             <>
               {isLiveMode ? (
