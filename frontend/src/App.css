@@ -68,10 +68,10 @@ body, html, #root {
   background-color: var(--bg-sidebar);
   display: flex;
   flex-direction: column;
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
   border-right: 1px solid var(--border-subtle);
-  overflow: hidden; 
+  overflow: hidden !important; /* Ensure no wrapper scrollbars */
   position: relative;
   z-index: 100;
 }
@@ -81,14 +81,9 @@ body, html, #root {
 }
 
 .sidebar-top, .sidebar-bottom {
-  width: var(--sidebar-width);
+  width: 100%;
   overflow: hidden;
   flex-shrink: 0;
-}
-
-.sidebar-wrapper.collapsed .sidebar-top,
-.sidebar-wrapper.collapsed .sidebar-bottom {
-  width: 68px;
 }
 
 .sidebar-mid { 
@@ -96,33 +91,21 @@ body, html, #root {
   overflow-y: auto; 
   overflow-x: hidden;
   padding: 0 12px; 
-  width: var(--sidebar-width);
-  /* Prevent 'slider column' look by using thin, transparent-by-default scrollbar */
+  width: 100%;
+  /* Standard Firefox scrollbar */
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
-  transition: padding 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sidebar-wrapper.collapsed .sidebar-mid {
   padding: 0 8px;
-  overflow-y: hidden;
-  width: 68px;
+  overflow-y: hidden; /* Disable scroll when collapsed to prevent glitches */
 }
 
-/* Ensure content inside doesn't cause width jumps during parent width transition */
-.sidebar-mid > * {
-  width: calc(var(--sidebar-width) - 24px);
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.sidebar-wrapper.collapsed .sidebar-mid > * {
-  width: 100%;
-}
-
-/* Scrollbar styling for sidebar-mid - make it non-obtrusive and non-spacing-consuming if possible */
+/* Scrollbar styling for sidebar-mid */
 .sidebar-mid::-webkit-scrollbar {
   width: 4px;
-  background: transparent;
 }
 
 .sidebar-mid::-webkit-scrollbar-thumb {
@@ -140,6 +123,17 @@ body, html, #root {
 
 .sidebar-mid::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* Ensure content inside doesn't cause width jumps */
+.sidebar-mid > * {
+  width: 100%;
+  max-width: calc(var(--sidebar-width) - 24px);
+  transition: opacity 0.2s;
+}
+
+.sidebar-wrapper.collapsed .sidebar-mid > * {
+  max-width: 100%;
 }
 
 /* Sidebar Toggle */
@@ -245,20 +239,61 @@ body, html, #root {
 
 /* Static Items */
 .sidebar-item-static {
-  padding: 8px 16px;
-  border-radius: 12px;
+  padding: 8px 12px;
+  border-radius: 20px;
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--text-primary);
   cursor: pointer;
-  margin: 0 8px;
+  margin: 0 8px 2px;
   white-space: nowrap;
   overflow: hidden;
+  transition: background-color 0.2s;
 }
 
 .sidebar-item-static:hover { background-color: var(--bg-hover); }
+
+.sidebar-item-static .icon-span {
+  font-size: 18px;
+  width: 24px;
+  display: flex;
+  justify-content: center;
+}
+
+.message-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.chat-bubble.assistant:hover .message-actions {
+  opacity: 1;
+}
+
+.action-btn-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.action-btn-circle:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
 
 /* Project Labels & Sessions */
 .project-label {
@@ -718,19 +753,20 @@ body, html, #root {
 }
 
 .continue-interaction-btn {
-  background-color: var(--bg-user-bubble);
+  background-color: var(--accent-blue);
   border: none;
   border-radius: 24px;
   padding: 12px 48px;
   font-weight: 600;
   cursor: pointer;
-  color: var(--text-primary);
+  color: white;
   transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(11, 87, 208, 0.2);
 }
 
 .continue-interaction-btn:hover {
-  background-color: var(--bg-hover);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(11, 87, 208, 0.3);
 }
 
 .load-more-indicator {
@@ -848,6 +884,220 @@ body, html, #root {
   .bubble-content { font-size: 15px; }
   .gradient-text { font-size: 36px; }
   .suggestion-grid { grid-template-columns: 1fr 1fr; }
+}
+
+/* --- Terminal: Premium Interactive Instance --- */
+.terminal-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0 24px 24px;
+  max-width: 1000px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.terminal-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: #000000;
+  border-radius: 24px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.2);
+  transition: background-color 0.3s ease;
+}
+
+.terminal-wrapper.light {
+  background-color: #ffffff;
+}
+
+.terminal-toolbar {
+  height: 56px;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background-color: #1e1f20;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.terminal-wrapper.light .terminal-toolbar {
+  background-color: #f8f9fa;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+}
+
+.terminal-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: 8px;
+}
+
+.terminal-type-icon {
+  font-family: 'JetBrains Mono', monospace;
+  background-color: var(--accent-blue);
+  color: white;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 6px;
+  line-height: 1.2;
+}
+
+.terminal-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #e3e3e3;
+}
+
+.terminal-wrapper.light .terminal-name {
+  color: #1f1f1f;
+}
+
+.instance-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: rgba(255,255,255,0.08);
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #e3e3e3;
+}
+
+.terminal-wrapper.light .instance-pill {
+  background-color: rgba(0,0,0,0.05);
+  color: #444746;
+}
+
+.status-dot-inner {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.status-dot-inner.connected { background-color: #10b981; box-shadow: 0 0 8px #10b981; }
+.status-dot-inner.connecting { background-color: #fbbc04; animation: pulse 1s infinite; }
+.status-dot-inner.disconnected { background-color: #d93025; }
+
+.toolbar-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+
+.terminal-action-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: #9aa0a6;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.terminal-action-btn:hover {
+  background-color: rgba(255,255,255,0.1);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.terminal-wrapper.light .terminal-action-btn {
+  color: #444746;
+}
+
+.terminal-wrapper.light .terminal-action-btn:hover {
+  background-color: rgba(0,0,0,0.08);
+  color: var(--accent-blue);
+}
+
+.terminal-inner {
+  flex: 1;
+  padding: 16px;
+  background-color: transparent;
+  overflow: hidden;
+  position: relative;
+}
+
+.terminal-overlay {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(0,0,0,0.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  backdrop-filter: blur(8px);
+  animation: fadeIn 0.4s ease;
+}
+
+.terminal-wrapper.light .terminal-overlay {
+  background-color: rgba(255,255,255,0.85);
+}
+
+.overlay-content {
+  text-align: center;
+  max-width: 400px;
+  padding: 40px;
+}
+
+.overlay-content h3 {
+  font-size: 24px;
+  margin-bottom: 12px;
+  color: white;
+}
+
+.terminal-wrapper.light .overlay-content h3 {
+  color: #1f1f1f;
+}
+
+.overlay-content p {
+  color: #9aa0a6;
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+
+.reconnect-btn-premium {
+  background-color: var(--accent-blue);
+  color: white;
+  border: none;
+  padding: 12px 32px;
+  border-radius: 28px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 auto;
+  transition: all 0.2s;
+  box-shadow: 0 4px 12px rgba(11, 87, 208, 0.3);
+}
+
+.reconnect-btn-premium:hover {
+  background-color: #1a73e8;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(11, 87, 208, 0.4);
+}
+
+.icon-span {
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 768px) {
+  .terminal-container { padding: 0 8px 16px; }
+  .terminal-wrapper { border-radius: 12px; }
 }
 
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }

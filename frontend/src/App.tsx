@@ -125,6 +125,7 @@ function App() {
                      uuid={selectedSession.id} 
                      projectPath={selectedSession.projectPath} 
                      initialPrompt={initialPrompt}
+                     theme={theme}
                    />
                 </div>
               ) : (

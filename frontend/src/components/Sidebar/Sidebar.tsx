@@ -28,7 +28,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   collapsed,
   onToggle
 }) => {
-  // Track collapse state for each project, default to true (collapsed)
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>(() => {
     const saved = localStorage.getItem('gemini-collapsed-projects');
     return saved ? JSON.parse(saved) : {};
@@ -170,11 +169,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       <div className="sidebar-bottom">
-         {!collapsed && (
-           <div className="sidebar-item-static">
-             <span>⚙️</span> 设置和帮助
-           </div>
-         )}
+          <div className="sidebar-item-static" title="帮助">
+             <span className="icon-span">❓</span>
+             {!collapsed && <span>帮助</span>}
+          </div>
+          <div className="sidebar-item-static" title="活动">
+             <span className="icon-span">⏳</span>
+             {!collapsed && <span>活动</span>}
+          </div>
+          <div className="sidebar-item-static" title="设置">
+             <span className="icon-span">⚙️</span>
+             {!collapsed && <span>设置</span>}
+          </div>
       </div>
     </div>
   );

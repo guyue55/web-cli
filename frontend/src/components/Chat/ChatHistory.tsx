@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import type { ChatMessage } from '../../hooks/useTranscript';
 
@@ -14,7 +14,6 @@ const CodeBlock = ({ children, ...props }: any) => {
   const [copied, setCopied] = useState(false);
   const textRef = useRef<string>('');
 
-  // Extract text from children
   React.Children.forEach(children, (child) => {
     if (typeof child === 'string') textRef.current += child;
     else if (child?.props?.children) textRef.current += child.props.children;
@@ -44,6 +43,14 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
   onStartLive
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom on new messages
+  useEffect(() => {
+    if (!isLoading && transcript.length > 0) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [transcript.length, isLoading]);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     if (e.currentTarget.scrollTop === 0 && hasMore && !isLoading) {
@@ -59,6 +66,12 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
     } catch (e) {
       return '';
     }
+  };
+
+  const copyFullMessage = (content: any) => {
+    const text = typeof content === 'string' ? content : JSON.stringify(content);
+    navigator.clipboard.writeText(text);
+    alert('消息已复制到剪贴板');
   };
 
   return (
@@ -86,17 +99,21 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
                 )}
                 <div className="markdown-body">
                   {typeof msg.content === 'string' ? (
-                     <ReactMarkdown 
-                       components={{
-                         pre: CodeBlock
-                       }}
-                     >
-                       {msg.content}
-                     </ReactMarkdown>
+                     <ReactMarkdown components={{ pre: CodeBlock }}>{msg.content}</ReactMarkdown>
                   ) : (
                      <pre>{JSON.stringify(msg.content, null, 2)}</pre>
                   )}
                 </div>
+                
+                {msg.role === 'assistant' && (
+                  <div className="message-actions">
+                    <button className="action-btn-circle" title="Copy" onClick={() => copyFullMessage(msg.content)}>📋</button>
+                    <button className="action-btn-circle" title="Good response">👍</button>
+                    <button className="action-btn-circle" title="Bad response">👎</button>
+                    <button className="action-btn-circle" title="Share">🔗</button>
+                  </div>
+                )}
+
                 {msg.timestamp && (
                    <div className="bubble-timestamp">
                       {formatTime(msg.timestamp)}
@@ -113,12 +130,16 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
                </button>
             </div>
           )}
+
+          <div ref={bottomRef} style={{ height: 1, marginTop: -1 }} />
         </div>
 
         {transcript.length === 0 && !isLoading && (
           <div className="welcome-screen">
-             <div className="welcome-icon">✦</div>
-             <h2>有什么我可以帮您的吗？</h2>
+             <div className="welcome-greeting">
+               <h2 className="gradient-text">您好，开发者</h2>
+               <p className="subtitle">我是您的 Gemini 代码助手。今天想做些什么？</p>
+             </div>
           </div>
         )}
 
