@@ -20,7 +20,7 @@ const IconRefresh = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="
 const IconExpand = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>;
 const IconShrink = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>;
 const IconArrowDown = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M7 13l5 5 5-5M7 6l5 5 5-5"/></svg>;
-const IconKeyboard = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><path d="M6 8h.01"/><path d="M10 8h.01"/><path d="M14 8h.01"/><path d="M18 8h.01"/><path d="M6 12h.01"/><path d="M10 12h.01"/><path d="M14 12h.01"/><path d="M18 12h.01"/><path d="M7 16h10"/></svg>;
+const IconKeyboard = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><path d="M6 8h.01"/><path d="M10 8h.01"/><path d="M14 8h.01"/><path d="M18 8h.01"/><path d="M6 12h.01"/><path d="M10 12h.01"/><path d="M14 12h.01"/><path d="M18 12h.01"/><path d="M7 16h10"/></svg>;
 
 // --- Helper Utilities ---
 const stripAnsi = (str: string) => str.replace(/[\u001b\u009b][[()#;?]*(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d\/#&.:=?%@~]*)*)?\u0007/g, '');
@@ -52,7 +52,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
 
     ws.onopen = () => {
       setStatus('online');
-      // Reliable command injection: ensure it only runs once per unique session-command pair
+      // Atomic command injection: ensure it only runs once per unique session-command pair
       if (initialPrompt && executionLockedRef.current !== `${uuid}-${initialPrompt}`) {
         setTimeout(() => {
           if (ws.readyState === WebSocket.OPEN) {
@@ -201,7 +201,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
            <button className="terminal-action-btn" title="导出日志 (.log)" onClick={handleDownload}>
              <span className="icon-span"><IconDownload /></span>
            </button>
-           <button className="terminal-action-btn focus-toggle" title={isFocusMode ? "常规视图" : "全屏专注"} 
+           <button className="terminal-action-btn focus-toggle" title={isFocusMode ? "退出全屏" : "全屏模式"} 
              onClick={() => setIsFocusMode(!isFocusMode)}>
              <span className="icon-span">{isFocusMode ? <IconShrink /> : <IconExpand />}</span>
            </button>
@@ -228,7 +228,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
               <div className="overlay-content">
                  <div className="overlay-icon-container"><IconInterrupt /></div>
                  <h3>交互实例已停止</h3>
-                 <p>该终端会话已断开连接。这可能是由于网络波动或后台进程结束引起的。</p>
+                 <p>该终端会话已断开连接。这可能是由于网络波动或长时间无操作引起的。</p>
                  <button className="reconnect-btn-premium" onClick={connect}>
                    <IconRefresh /> 重新启动实例
                  </button>
