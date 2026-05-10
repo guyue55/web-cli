@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ApiService } from '../../services/ApiService';
 
 interface FileItem {
   name: string;
@@ -12,16 +13,10 @@ const FileBrowser: React.FC = () => {
 
   const fetchFiles = async () => {
     try {
-      const host = window.location.hostname || 'localhost';
-      const url = currentPath 
-        ? `http://${host}:3001/files?path=${encodeURIComponent(currentPath)}` 
-        : `http://${host}:3001/files`;
-      const response = await fetch(url);
-      const data = await response.json();
+      const data = await ApiService.getFiles(currentPath || undefined);
       setFiles(data);
     } catch { /* ignore */ }
   };
-
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchFiles();

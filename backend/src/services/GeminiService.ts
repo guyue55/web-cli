@@ -4,31 +4,16 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { WebSocket } from 'ws';
+import type { HistoryItem, ChatMessage } from '@web-cli/shared';
 
 const execAsync = promisify(exec);
 const GEMINI_BASE_DIR = path.join(os.homedir(), '.gemini');
 
-export interface GeminiSessionRecord {
-  projectPath: string;
-  projectName: string;
-  index: string;
-  name: string;
-  time: string;
-  updatedAt: number;
-  id: string; // UUID
-}
-
-export interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp?: string;
-}
-
 export class GeminiService {
-  private static sessionCache: GeminiSessionRecord[] = [];
+  private static sessionCache: HistoryItem[] = [];
   private static isScanning = false;
 
-  static getCachedSessions(): GeminiSessionRecord[] {
+  static getCachedSessions(): HistoryItem[] {
     return this.sessionCache;
   }
 
@@ -51,7 +36,7 @@ export class GeminiService {
         if (!fs.existsSync(projectsFile)) return;
 
         const { projects } = JSON.parse(fs.readFileSync(projectsFile, 'utf-8'));
-        const allRecords: GeminiSessionRecord[] = [];
+        const allRecords: HistoryItem[] = [];
 
         for (const [projectPath, projectName] of Object.entries(projects as Record<string, string>)) {
           const chatDir = path.join(GEMINI_BASE_DIR, 'tmp', projectName, 'chats');

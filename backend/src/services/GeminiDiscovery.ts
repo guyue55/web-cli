@@ -2,18 +2,9 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { WebSocket } from 'ws';
+import type { HistoryItem } from '@web-cli/shared';
 
 const GEMINI_BASE_DIR = path.join(os.homedir(), '.gemini');
-
-export interface GeminiSessionRecord {
-  projectPath: string;
-  projectName: string;
-  index: string;
-  name: string;
-  time: string;
-  updatedAt: number; // Numeric timestamp for sorting
-  id: string; // UUID
-}
 
 /**
  * GeminiDiscovery V7: Added updatedAt timestamp for sorting.
@@ -107,7 +98,7 @@ export class GeminiDiscovery {
               }
             }
 
-            const record: GeminiSessionRecord = {
+            const record: HistoryItem = {
               projectPath,
               projectName,
               index: '?', 

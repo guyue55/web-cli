@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
-import type { ChatMessage } from '../../hooks/useTranscript';
+import type { ChatMessage } from '@web-cli/shared';
 
 interface ChatHistoryProps {
   transcript: ChatMessage[];
@@ -113,10 +113,18 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
                 
                 {msg.role === 'assistant' && (
                   <div className="message-actions">
-                    <button className="action-btn-circle" title="Copy" onClick={() => copyFullMessage(msg.content)}>📋</button>
-                    <button className="action-btn-circle" title="Good response">👍</button>
-                    <button className="action-btn-circle" title="Bad response">👎</button>
-                    <button className="action-btn-circle" title="Share">🔗</button>
+                    <button className="action-btn-circle" title="复制" onClick={() => copyFullMessage(msg.content)}>
+                      <span className="material-symbols-outlined" style={{ fontSize: 18 }}>content_copy</span>
+                    </button>
+                    <button className="action-btn-circle" title="好评">
+                      <span className="material-symbols-outlined" style={{ fontSize: 18 }}>thumb_up</span>
+                    </button>
+                    <button className="action-btn-circle" title="差评">
+                      <span className="material-symbols-outlined" style={{ fontSize: 18 }}>thumb_down</span>
+                    </button>
+                    <button className="action-btn-circle" title="分享">
+                      <span className="material-symbols-outlined" style={{ fontSize: 18 }}>share</span>
+                    </button>
                   </div>
                 )}
 

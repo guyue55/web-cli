@@ -1,11 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { HistoryItem } from './useSessions';
-
-export interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp?: string;
-}
+import type { HistoryItem, ChatMessage } from '@web-cli/shared';
+import { ApiService } from '../services/ApiService';
 
 export function useTranscript(selectedSession: HistoryItem | null) {
   const [transcript, setTranscript] = useState<ChatMessage[]>([]);
@@ -25,21 +20,8 @@ export function useTranscript(selectedSession: HistoryItem | null) {
     if (isLoading && !append) return;
     setIsLoading(true);
     try {
-      const host = window.location.hostname || 'localhost';
       const limit = 20;
-      const url = `http://${host}:3001/history/${session.id}/transcript?projectName=${encodeURIComponent(session.projectName)}&limit=${limit}&offset=${currentOffset}`;
-      
-      const res = await fetch(url).catch(() => null);
-      if (!res || !res.ok) {
-        console.warn('Transcript fetch failed or empty');
-        return;
-      }
-
-      const data = await res.json();
-      if (!Array.isArray(data)) {
-        console.error('Invalid data format: expected array');
-        return;
-      }
+      const data = await ApiService.getTranscript(session.id, session.projectName, limit, currentOffset);
       
       if (data.length < limit) setHasMore(false);
       setTranscript(prev => currentOffset === 0 ? data : [...data, ...prev]);
