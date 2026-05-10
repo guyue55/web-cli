@@ -17,6 +17,7 @@ export interface ISession {
 
 export class SessionManager {
   private static sessions = new Map<string, ISession>();
+  private static timeouts = new Map<string, NodeJS.Timeout>();
 
   static getSessionKey(projectPath: string, uuid: string): string {
     return `${projectPath}:${uuid}`;
@@ -24,6 +25,13 @@ export class SessionManager {
 
   static getOrCreateSession(uuid: string, projectPath: string): ISession {
     const sessionKey = this.getSessionKey(projectPath, uuid);
+    
+    // Clear any existing cleanup timeout if client returns
+    if (this.timeouts.has(sessionKey)) {
+      clearTimeout(this.timeouts.get(sessionKey)!);
+      this.timeouts.delete(sessionKey);
+    }
+
     if (this.sessions.has(sessionKey)) {
       return this.sessions.get(sessionKey)!;
     }
@@ -35,7 +43,6 @@ export class SessionManager {
     let useFallback = false;
 
     // Command: resume or new
-    // Use --prompt-interactive " " to force interactive mode even without a TTY
     const args = isNew ? 
       ['--skip-trust', '--approval-mode', 'yolo', '--prompt-interactive', ' '] : 
       ['--resume', uuid, '--skip-trust', '--approval-mode', 'yolo', '--prompt-interactive', ' '];
@@ -106,7 +113,6 @@ if __name__ == "__main__":
       cp.stderr?.on('data', (data) => {
         const msg = data.toString();
         console.error(`[SessionManager] Fallback stderr: ${msg}`);
-        // Don't show technical PTY errors to user unless critical
         if (!msg.includes('tcgetattr') && !msg.includes('ioctl')) {
           onDataCb(`\x1b[31m[System Error] ${msg}\x1b[0m`);
         }
@@ -122,19 +128,23 @@ if __name__ == "__main__":
         write: (data: string) => {
           if (cp.stdin?.writable) cp.stdin.write(data);
         },
+        kill: () => {
+          cp.kill();
+        },
         resize: () => {},
         onData: (cb: (data: string) => void) => {
           onDataCb = cb;
         },
         onExit: (cb: (status: { exitCode: number; signal?: number }) => void) => {
+          const originalOnExit = onExitCb;
           onExitCb = (status) => {
-            // Ensure callback is called only once
-            onExitCb = () => {};
+            originalOnExit(status);
             cb(status);
           };
         }
       };
     }
+
     const session: ISession = {
       id: uuid,
       projectPath,
@@ -158,16 +168,17 @@ if __name__ == "__main__":
 
     ptyProcess.onExit(({ exitCode }: { exitCode: number }) => {
       console.log(`[SessionManager] Session ${uuid} exited with code ${exitCode}`);
-      
-      // Notify all clients that the session has ended
       session.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
           client.send(JSON.stringify({ type: 'exit', code: exitCode }));
-          client.close(); // Close the connection as the session is gone
+          client.close();
         }
       });
-      
       this.sessions.delete(sessionKey);
+      if (this.timeouts.has(sessionKey)) {
+        clearTimeout(this.timeouts.get(sessionKey)!);
+        this.timeouts.delete(sessionKey);
+      }
     });
 
     this.sessions.set(sessionKey, session);
@@ -182,6 +193,20 @@ if __name__ == "__main__":
     const session = this.sessions.get(sessionKey);
     if (session) {
       session.clients.delete(ws);
+      
+      // If no clients left, schedule session destruction in 5 minutes
+      if (session.clients.size === 0) {
+        console.log(`[SessionManager] No clients left for ${sessionKey}. Scheduling destruction in 5m.`);
+        const timeout = setTimeout(() => {
+          console.log(`[SessionManager] Cleaning up idle session: ${sessionKey}`);
+          if (session.pty && (session.pty as any).kill) {
+             (session.pty as any).kill();
+          }
+          this.sessions.delete(sessionKey);
+          this.timeouts.delete(sessionKey);
+        }, 5 * 60 * 1000);
+        this.timeouts.set(sessionKey, timeout);
+      }
     }
   }
 }

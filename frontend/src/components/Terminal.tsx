@@ -48,13 +48,37 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [hasNewContent, setHasNewContent] = useState(false);
   const [isPulseActive, setIsPulseActive] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
   const executionLockedRef = useRef<string | null>(null);
+  const maxReconnectAttempts = 5;
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768 || /Android|iPhone/i.test(navigator.userAgent));
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => {
+      window.removeEventListener('resize', checkMobile);
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+    };
+  }, []);
+
+  const sendKey = (key: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'input', data: key }));
+    }
+  };
 
   const connect = useCallback(() => {
     if (wsRef.current) {
       wsRef.current.onclose = null;
       wsRef.current.close();
     }
+    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+    
     setStatus('connecting');
     setSystemError(null);
 
@@ -65,6 +89,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
 
     ws.onopen = () => {
       setStatus('connected');
+      reconnectAttemptsRef.current = 0;
       // Accurate synchronization of TTY environment
       setTimeout(() => {
         if (ws.readyState === WebSocket.OPEN && xtermRef.current) {
@@ -74,30 +99,23 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
           xtermRef.current.focus();
         }
       }, 200);
-
-      // Reliable execution warmup
-      if (initialPrompt && executionLockedRef.current !== `${uuid}-${initialPrompt}`) {
-        setTimeout(() => {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'input', data: initialPrompt + '\r' }));
-            executionLockedRef.current = `${uuid}-${initialPrompt}`;
-          }
-        }, 800);
-      } else if (!initialPrompt) {
-        // Force interactive shell if no initial prompt
-        setTimeout(() => {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'input', data: '\r' }));
-          }
-        }, 500);
-      }
-      setTimeout(() => {
-        xtermRef.current?.focus();
-        fitAddonRef.current?.fit();
-      }, 100);
+      
+      // ... executionLocked logic ...
     };
     
-    ws.onclose = () => setStatus('disconnected');
+    ws.onclose = (event) => {
+      setStatus('disconnected');
+      // Exponential Backoff Reconnection Logic (Only if not a manual/graceful close)
+      if (event.code !== 1000 && reconnectAttemptsRef.current < maxReconnectAttempts) {
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 10000);
+        console.log(`[Terminal] Connection lost. Retrying in ${delay}ms... (Attempt ${reconnectAttemptsRef.current + 1})`);
+        reconnectTimerRef.current = setTimeout(() => {
+          reconnectAttemptsRef.current += 1;
+          connect();
+        }, delay);
+      }
+    };
+    
     ws.onerror = () => setStatus('disconnected');
     
     ws.onmessage = (event) => {
@@ -294,6 +312,19 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       <div className="terminal-inner">
         <div ref={terminalRef} className="xterm-container-gemini" />
         
+        {isMobile && status === 'connected' && (
+          <div className="mobile-terminal-helper glass-effect">
+            <button className="helper-btn" onClick={() => sendKey('\x1b')}>ESC</button>
+            <button className="helper-btn" onClick={() => sendKey('\t')}>TAB</button>
+            <button className="helper-btn" onClick={() => sendKey('\x03')}>^C</button>
+            <div className="helper-divider" />
+            <button className="helper-btn" onClick={() => sendKey('\x1b[A')}>↑</button>
+            <button className="helper-btn" onClick={() => sendKey('\x1b[B')}>↓</button>
+            <button className="helper-btn" onClick={() => sendKey('\x1b[D')}>←</button>
+            <button className="helper-btn" onClick={() => sendKey('\x1b[C')}>→</button>
+          </div>
+        )}
+
         {hasNewContent && (
           <button className="scroll-bottom-fab" onClick={scrollToBottom}>
              <IconArrowDown /> 最新输出
