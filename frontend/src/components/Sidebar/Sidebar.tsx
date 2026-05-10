@@ -49,36 +49,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <div className={`sidebar-wrapper ${collapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-top">
         <button className="sidebar-toggle-btn" onClick={onToggle} title="Toggle Sidebar">☰</button>
+
+        <button 
+          className={`new-chat-btn-official ${collapsed ? 'is-mini' : ''}`} 
+          onClick={onNewChat}
+          title={collapsed ? "发起新对话" : undefined}
+        >
+          <span className="plus-icon">＋</span>
+          {!collapsed && <span>发起新对话</span>}
+        </button>
+
         {!collapsed && (
-          <>
-            <button className="new-chat-btn-official" onClick={onNewChat}>
-              <span className="plus-icon">＋</span> 发起新对话
-            </button>
-            <div className="sidebar-search-container">
-              <span className="search-icon">🔍</span>
-              <input 
-                type="text" 
-                className="sidebar-search-input" 
-                placeholder="搜索会话..." 
-                value={searchQuery}
-                onChange={(e) => onSearchChange(e.target.value)}
-              />
-              {searchQuery && (
-                <button 
-                  className="search-clear-btn" 
-                  onClick={() => onSearchChange('')}
-                  title="清空搜索"
-                >
-                  ×
-                </button>
-              )}
-            </div>
-          </>
+          <div className="sidebar-search-container">
+            <span className="search-icon">🔍</span>
+            <input 
+              type="text" 
+              className="sidebar-search-input" 
+              placeholder="搜索会话..." 
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+            />
+            {searchQuery && (
+              <button 
+                className="search-clear-btn" 
+                onClick={() => onSearchChange('')}
+                title="清空搜索"
+              >
+                ×
+              </button>
+            )}
+          </div>
         )}
       </div>
 
       <div className="sidebar-mid session-list-container">
-        {!collapsed && <div style={{ marginTop: 8, padding: '0 16px', fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>最近</div>}
+        {!collapsed && <div className="sidebar-section-label">最近</div>}
         
         {groupedHistory.length === 0 && isLoading ? (
           <div className="skeleton-list">
@@ -152,8 +157,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
               )}
 
               {collapsed && (
-                <div className="collapsed-project-indicator" title={projectName}>
-                   📁
+                <div className="collapsed-project-indicator" title={`${projectName}${anyActive ? ' (有活动会话)' : ''}`}>
+                   <div style={{ position: 'relative', display: 'inline-block' }}>
+                     📁
+                     {anyActive && <span className="active-status-dot-mini" style={{ position: 'absolute', top: -2, right: -2 }} />}
+                   </div>
                 </div>
               )}
             </div>
