@@ -56,13 +56,16 @@ export class SessionManager {
     }
 
     if (useFallback) {
-      // For child_process.spawn (non-TTY), --prompt-interactive is forbidden.
-      // We use a positional " " instead to keep it interactive.
-      const fallbackArgs = isNew ? 
-        ['--skip-trust', '--approval-mode', 'yolo', ' '] : 
-        ['--resume', uuid, '--skip-trust', '--approval-mode', 'yolo', ' '];
-
-      const cp = spawn(geminiPath, fallbackArgs, {
+      // Use Python's pty module as a powerful bridge to get a real TTY
+      // This solves the "--prompt-interactive cannot be used when input is piped" error
+      const pyArgs = isNew ? 
+        ['--skip-trust', '--approval-mode', 'yolo', '--prompt-interactive', ' '] : 
+        ['--resume', uuid, '--skip-trust', '--approval-mode', 'yolo', '--prompt-interactive', ' '];
+      
+      const pyScript = `import pty, sys; pty.spawn([r'${geminiPath}'] + ${JSON.stringify(pyArgs)})`;
+      
+      console.log(`[SessionManager] Spawning via Python PTY Bridge...`);
+      const cp = spawn('python3', ['-c', pyScript], {
         cwd: projectPath,
         env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor', FORCE_COLOR: '1' } as any,
         stdio: ['pipe', 'pipe', 'pipe']
@@ -75,7 +78,10 @@ export class SessionManager {
       cp.stderr?.on('data', (data) => {
         const msg = data.toString();
         console.error(`[SessionManager] Fallback stderr: ${msg}`);
-        onDataCb(`\x1b[31m[System Error] ${msg}\x1b[0m`);
+        // Don't show technical PTY errors to user unless critical
+        if (!msg.includes('tcgetattr') && !msg.includes('ioctl')) {
+          onDataCb(`\x1b[31m[System Error] ${msg}\x1b[0m`);
+        }
       });
       cp.on('error', (err) => {
         console.error(`[SessionManager] Fallback spawn error: ${err}`);
