@@ -55,7 +55,7 @@ function App() {
   };
 
   return (
-    <div className="app-container">
+    <div className={`app-container ${isSidebarCollapsed ? 'sidebar-collapsed' : 'sidebar-expanded'}`}>
       <button 
         className="mobile-hamburger" 
         aria-label="Toggle Sidebar"
@@ -63,6 +63,11 @@ function App() {
       >
         ☰
       </button>
+
+      {/* Mobile Overlay */}
+      {!isSidebarCollapsed && (
+        <div className="mobile-overlay" onClick={() => setIsSidebarCollapsed(true)} />
+      )}
 
       <Sidebar 
         groupedHistory={groupedHistory}

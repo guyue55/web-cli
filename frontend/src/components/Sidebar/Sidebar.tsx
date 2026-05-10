@@ -169,13 +169,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         })}
       </div>
 
-      {!collapsed && (
-        <div className="sidebar-bottom">
+      <div className="sidebar-bottom">
+         {!collapsed && (
            <div className="sidebar-item-static">
              <span>⚙️</span> 设置和帮助
            </div>
-        </div>
-      )}
+         )}
+      </div>
     </div>
   );
 };

@@ -68,11 +68,12 @@ body, html, #root {
   background-color: var(--bg-sidebar);
   display: flex;
   flex-direction: column;
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
   border-right: 1px solid var(--border-subtle);
-  overflow: hidden; /* Fix: Prevent extra scrollbars on the wrapper itself */
+  overflow: hidden; 
   position: relative;
+  z-index: 100;
 }
 
 .sidebar-wrapper.collapsed { 
@@ -80,8 +81,14 @@ body, html, #root {
 }
 
 .sidebar-top, .sidebar-bottom {
-  flex-shrink: 0;
+  width: var(--sidebar-width);
   overflow: hidden;
+  flex-shrink: 0;
+}
+
+.sidebar-wrapper.collapsed .sidebar-top,
+.sidebar-wrapper.collapsed .sidebar-bottom {
+  width: 68px;
 }
 
 .sidebar-mid { 
@@ -89,19 +96,33 @@ body, html, #root {
   overflow-y: auto; 
   overflow-x: hidden;
   padding: 0 12px; 
+  width: var(--sidebar-width);
+  /* Prevent 'slider column' look by using thin, transparent-by-default scrollbar */
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
-  transition: padding 0.3s;
+  transition: padding 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sidebar-wrapper.collapsed .sidebar-mid {
   padding: 0 8px;
-  overflow-y: hidden; /* Hide vertical scroll when collapsed to prevent 'slider column' look */
+  overflow-y: hidden;
+  width: 68px;
 }
 
-/* Scrollbar styling for sidebar-mid */
+/* Ensure content inside doesn't cause width jumps during parent width transition */
+.sidebar-mid > * {
+  width: calc(var(--sidebar-width) - 24px);
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar-wrapper.collapsed .sidebar-mid > * {
+  width: 100%;
+}
+
+/* Scrollbar styling for sidebar-mid - make it non-obtrusive and non-spacing-consuming if possible */
 .sidebar-mid::-webkit-scrollbar {
   width: 4px;
+  background: transparent;
 }
 
 .sidebar-mid::-webkit-scrollbar-thumb {
@@ -721,7 +742,65 @@ body, html, #root {
 }
 
 /* Welcome Screen */
-.brand-logo { font-size: 20px; font-weight: 500; color: var(--accent-blue); cursor: pointer; }
+.brand-logo {
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--accent-blue);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.brand-logo::after {
+  content: '✦';
+  font-size: 14px;
+  animation: sparkle 3s infinite;
+  display: inline-block;
+}
+
+@keyframes sparkle {
+  0%, 100% { opacity: 0.3; transform: scale(0.8) rotate(0deg); }
+  50% { opacity: 1; transform: scale(1.2) rotate(45deg); color: #9b72cb; }
+}
+
+.mobile-hamburger {
+  display: none;
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 1100;
+  background-color: var(--bg-main);
+  border: 1px solid var(--border-subtle);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 20px;
+  color: var(--text-secondary);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.mobile-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+  z-index: 900;
+  animation: fadeInOverlay 0.3s ease;
+}
+
+@keyframes fadeInOverlay {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 .header-center { flex: 1; display: flex; justify-content: center; }
 .welcome-screen { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 0 40px 100px; max-width: 900px; margin: 0 auto; }
 .welcome-greeting { text-align: center; margin-bottom: 60px; }
@@ -746,11 +825,29 @@ body, html, #root {
 .suggestion-card p { font-size: 14px; font-weight: 500; color: var(--text-primary); margin: 0; }
 
 @media (max-width: 768px) {
+  .mobile-hamburger { display: flex; }
+  
+  .sidebar-wrapper { 
+    position: fixed; 
+    transform: translateX(-100%); 
+    height: 100%; 
+    z-index: 1000; 
+  }
+  
+  .sidebar-expanded .sidebar-wrapper { 
+    transform: translateX(0); 
+    box-shadow: 10px 0 30px rgba(0,0,0,0.2); 
+  }
+  
+  .sidebar-expanded .mobile-overlay {
+    display: block;
+  }
+
+  .header { padding-left: 64px; }
+  .chat-bubble { gap: 12px; }
+  .bubble-content { font-size: 15px; }
   .gradient-text { font-size: 36px; }
   .suggestion-grid { grid-template-columns: 1fr 1fr; }
-  .sidebar-wrapper { position: fixed; transform: translateX(-100%); height: 100%; z-index: 1000; }
-  .sidebar-wrapper.open { transform: translateX(0); box-shadow: 10px 0 30px rgba(0,0,0,0.2); }
-  .header { padding-left: 64px; }
 }
 
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
