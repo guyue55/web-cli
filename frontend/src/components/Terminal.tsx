@@ -65,14 +65,15 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
 
     ws.onopen = () => {
       setStatus('connected');
-      // Force initial size sync to backend
+      // Accurate synchronization of TTY environment
       setTimeout(() => {
         if (ws.readyState === WebSocket.OPEN && xtermRef.current) {
-          ws.send(JSON.stringify({ type: 'resize', cols: 100, rows: 30 }));
           fitAddonRef.current?.fit();
+          const { cols, rows } = xtermRef.current;
+          ws.send(JSON.stringify({ type: 'resize', cols, rows }));
           xtermRef.current.focus();
         }
-      }, 100);
+      }, 200);
 
       // Reliable execution warmup
       if (initialPrompt && executionLockedRef.current !== `${uuid}-${initialPrompt}`) {
