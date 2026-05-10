@@ -62,13 +62,23 @@ export class GeminiService {
             for (const file of files) {
               const filePath = path.join(chatDir, file);
               const stats = fs.statSync(filePath);
-              const match = file.match(/session-.*-(.*)\.jsonl$/);
-              const uuid = match ? match[1] : file.replace('.jsonl', '');
-              
-              // Quick peek for name
+              // Extract full UUID from file content (first line)
+              let uuid = '';
               let sessionName = 'Untitled Session';
               try {
                 const content = fs.readFileSync(filePath, 'utf-8');
+                const firstLine = content.split('\n')[0];
+                if (firstLine) {
+                  const firstEntry = JSON.parse(firstLine);
+                  uuid = firstEntry.sessionId || '';
+                }
+
+                // If UUID extraction failed from first line, fallback to filename logic
+                if (!uuid) {
+                  const match = file.match(/session-.*-(.*)\.jsonl$/);
+                  uuid = match ? match[1] : file.replace('.jsonl', '');
+                }
+
                 const firstMsgLine = content.split('\n').find(l => l.trim() && l.includes('"type":"user"'));
                 if (firstMsgLine) {
                   const entry = JSON.parse(firstMsgLine);
@@ -76,7 +86,12 @@ export class GeminiService {
                                 (Array.isArray(entry.content) ? entry.content.map((p: any) => p.text || '').join('') : 'Complex Session');
                   if (sessionName.length > 50) sessionName = sessionName.substring(0, 47) + '...';
                 }
-              } catch (e) {}
+              } catch (e) {
+                if (!uuid) {
+                  const match = file.match(/session-.*-(.*)\.jsonl$/);
+                  uuid = match ? match[1] : file.replace('.jsonl', '');
+                }
+              }
 
               allRecords.push({
                 projectPath,

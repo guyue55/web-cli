@@ -51,16 +51,30 @@ export class GeminiDiscovery {
             const filePath = path.join(chatDir, file);
             const stats = fs.statSync(filePath);
             
-            const match = file.match(/session-.*-(.*)\.jsonl$/);
-            const uuid = match ? match[1] : file.replace('.jsonl', '');
-            
+            // Extract full UUID and name from file content
+            let uuid = '';
             let sessionName = 'Untitled Session';
             try {
               const content = fs.readFileSync(filePath, 'utf-8');
-              const lines = content.split('\n').filter(l => l.trim());
+              const lines = content.split('\n');
+              
+              // 1. Get full UUID from first line
+              if (lines[0]) {
+                const firstEntry = JSON.parse(lines[0]);
+                uuid = firstEntry.sessionId || '';
+              }
+
+              // Fallback to filename parsing if content is corrupted
+              if (!uuid) {
+                const match = file.match(/session-.*-(.*)\.jsonl$/);
+                uuid = match ? match[1] : file.replace('.jsonl', '');
+              }
+
+              // 2. Find first user message for session name
               for (let i = 1; i < lines.length; i++) {
+                if (!lines[i].trim()) continue;
                 const entry = JSON.parse(lines[i]);
-                if (entry.content) {
+                if (entry.type === 'user' && entry.content) {
                   let text = '';
                   if (typeof entry.content === 'string') {
                     text = entry.content;
@@ -74,7 +88,13 @@ export class GeminiDiscovery {
                   }
                 }
               }
-            } catch (e) {}
+            } catch (e) {
+              // Last resort fallback
+              if (!uuid) {
+                const match = file.match(/session-.*-(.*)\.jsonl$/);
+                uuid = match ? match[1] : file.replace('.jsonl', '');
+              }
+            }
 
             const record: GeminiSessionRecord = {
               projectPath,

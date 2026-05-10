@@ -35,7 +35,7 @@ export class SessionManager {
     let useFallback = false;
 
     // Command: resume or new
-    const args = isNew ? ['--trust'] : ['--resume', uuid, '--trust'];
+    const args = isNew ? ['--skip-trust'] : ['--resume', uuid, '--skip-trust'];
 
     try {
       ptyProcess = pty.spawn('gemini', args, {
