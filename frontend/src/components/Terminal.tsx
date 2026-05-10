@@ -52,7 +52,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
 
     ws.onopen = () => {
       setStatus('online');
-      // Atomic command injection: ensure it only runs once per unique session-command pair
+      // Atomic command execution: ensure specific command runs only once per unique session context
       if (initialPrompt && executionLockedRef.current !== `${uuid}-${initialPrompt}`) {
         setTimeout(() => {
           if (ws.readyState === WebSocket.OPEN) {
@@ -61,7 +61,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
           }
         }, 800);
       }
-      setTimeout(() => fitAddonRef.current?.fit(), 100);
+      setTimeout(() => fitAddonRef.current?.fit(), 200);
     };
     
     ws.onclose = () => setStatus('offline');
@@ -84,7 +84,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     const term = new XTerm({
       cursorBlink: true,
       fontSize: 14,
-      fontFamily: '"JetBrains Mono", "Cascadia Code", Menlo, monospace',
+      fontFamily: '"JetBrains Mono", "Cascadia Code", Menlo, Monaco, monospace',
       theme: {
         background: isDark ? '#131314' : '#f8f9fa',
         foreground: isDark ? '#e3e3e3' : '#202124',
@@ -169,9 +169,17 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `terminal-execution-${uuid.slice(0, 8)}.log`;
+    const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    a.download = `terminal-execution-${uuid.slice(0, 8)}-${dateStr}.log`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const scrollToBottom = () => {
+    if (xtermRef.current) {
+      xtermRef.current.scrollToBottom();
+      xtermRef.current.focus();
+    }
   };
 
   return (
@@ -182,7 +190,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
            <span className="terminal-name">执行实例</span>
         </div>
 
-        <div className="instance-pill" title={`CWD: ${projectPath}`}>
+        <div className="instance-pill" title={`Path: ${projectPath}`}>
            <span className={`status-dot-inner ${status}`} />
            <span>{status === 'online' ? '就绪' : status === 'connecting' ? '启动中' : '离线'}</span>
         </div>
@@ -208,7 +216,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
            <button className="terminal-action-btn" title="重启实例" onClick={connect}>
              <span className="icon-span"><IconRefresh /></span>
            </button>
-           <button className="terminal-action-btn mobile-keyboard-btn" onClick={() => inputRef.current?.focus()}>
+           <button className="terminal-action-btn mobile-keyboard-btn" title="唤起键盘" onClick={() => inputRef.current?.focus()}>
              <span className="icon-span"><IconKeyboard /></span>
            </button>
         </div>
@@ -218,7 +226,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
         <div ref={terminalRef} style={{ width: '100%', height: '100%' }} />
         
         {hasNewContent && (
-          <button className="scroll-bottom-btn" onClick={() => xtermRef.current?.scrollToBottom()}>
+          <button className="scroll-bottom-btn" onClick={scrollToBottom}>
              <IconArrowDown /> 发现新输出
           </button>
         )}
