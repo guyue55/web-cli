@@ -35,25 +35,36 @@ export class SessionManager {
     let useFallback = false;
 
     // Command: resume or new
-    const args = isNew ? ['--skip-trust'] : ['--resume', uuid, '--skip-trust'];
+    // Use --prompt-interactive " " to force interactive mode even without a TTY
+    const args = isNew ? 
+      ['--skip-trust', '--approval-mode', 'yolo', '--prompt-interactive', ' '] : 
+      ['--resume', uuid, '--skip-trust', '--approval-mode', 'yolo', '--prompt-interactive', ' '];
+
+    const geminiPath = '/Users/guyue/.nvm/versions/node/v24.13.0/bin/gemini';
 
     try {
-      ptyProcess = pty.spawn('gemini', args, {
-        name: 'xterm-color',
-        cols: 80,
-        rows: 24,
+      ptyProcess = pty.spawn(geminiPath, args, {
+        name: 'xterm-256color',
+        cols: 100,
+        rows: 30,
         cwd: projectPath,
-        env: { ...process.env, TERM: 'xterm-256color' } as any
+        env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor', FORCE_COLOR: '1' } as any
       });
     } catch (err) {
-      console.warn(`[SessionManager] node-pty failed. Falling back to child_process.spawn.`);
+      console.warn(`[SessionManager] node-pty failed: ${err}. Falling back to child_process.spawn.`);
       useFallback = true;
     }
 
     if (useFallback) {
-      const cp = spawn('gemini', args, {
+      // For child_process.spawn (non-TTY), --prompt-interactive is forbidden.
+      // We use a positional " " instead to keep it interactive.
+      const fallbackArgs = isNew ? 
+        ['--skip-trust', '--approval-mode', 'yolo', ' '] : 
+        ['--resume', uuid, '--skip-trust', '--approval-mode', 'yolo', ' '];
+
+      const cp = spawn(geminiPath, fallbackArgs, {
         cwd: projectPath,
-        env: { ...process.env, TERM: 'xterm-256color' } as any,
+        env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor', FORCE_COLOR: '1' } as any,
         stdio: ['pipe', 'pipe', 'pipe']
       });
 
@@ -61,23 +72,35 @@ export class SessionManager {
       let onExitCb: (status: { exitCode: number; signal?: number }) => void = () => {};
 
       cp.stdout?.on('data', (data) => onDataCb(data.toString()));
-      cp.stderr?.on('data', (data) => onDataCb(data.toString()));
+      cp.stderr?.on('data', (data) => {
+        const msg = data.toString();
+        console.error(`[SessionManager] Fallback stderr: ${msg}`);
+        onDataCb(`\x1b[31m[System Error] ${msg}\x1b[0m`);
+      });
+      cp.on('error', (err) => {
+        console.error(`[SessionManager] Fallback spawn error: ${err}`);
+        onDataCb(`\x1b[31m[Critical Error] Failed to start gemini process: ${err.message}\x1b[0m`);
+        onExitCb({ exitCode: 1 });
+      });
       cp.on('exit', (code, signal) => onExitCb({ exitCode: code ?? 0, signal: signal ? 1 : undefined as any }));
 
       ptyProcess = {
         write: (data: string) => {
-          cp.stdin?.write(data);
+          if (cp.stdin?.writable) cp.stdin.write(data);
         },
         resize: () => {},
         onData: (cb: (data: string) => void) => {
           onDataCb = cb;
         },
         onExit: (cb: (status: { exitCode: number; signal?: number }) => void) => {
-          onExitCb = cb;
+          onExitCb = (status) => {
+            // Ensure callback is called only once
+            onExitCb = () => {};
+            cb(status);
+          };
         }
       };
     }
-
     const session: ISession = {
       id: uuid,
       projectPath,
@@ -101,6 +124,15 @@ export class SessionManager {
 
     ptyProcess.onExit(({ exitCode }: { exitCode: number }) => {
       console.log(`[SessionManager] Session ${uuid} exited with code ${exitCode}`);
+      
+      // Notify all clients that the session has ended
+      session.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({ type: 'exit', code: exitCode }));
+          client.close(); // Close the connection as the session is gone
+        }
+      });
+      
       this.sessions.delete(sessionKey);
     });
 

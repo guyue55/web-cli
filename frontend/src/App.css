@@ -886,7 +886,7 @@ body, html, #root {
   .suggestion-grid { grid-template-columns: 1fr 1fr; }
 }
 
-/* --- Terminal: Premium Interactive Instance --- */
+/* --- Terminal: Premium Interactive Instance (Gemini Redesign) --- */
 .terminal-container {
   flex: 1;
   display: flex;
@@ -902,287 +902,499 @@ body, html, #root {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background-color: #000000;
-  border-radius: 24px;
+  background-color: #131314;
+  border-radius: 28px;
   overflow: hidden;
   border: 1px solid var(--border-subtle);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: var(--shadow-float);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
 }
 
 .terminal-wrapper.light {
   background-color: #ffffff;
-  box-shadow: 0 8px 32px rgba(60, 64, 67, 0.1);
 }
 
-.terminal-toolbar {
-  height: 64px;
-  padding: 0 24px;
+.premium-header {
+  height: 72px;
+  padding: 0 28px;
   display: flex;
   align-items: center;
-  gap: 20px;
-  background-color: #1e1f20;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
+  gap: 24px;
+  background-color: rgba(30, 31, 32, 0.7);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.terminal-wrapper.light .terminal-toolbar {
-  background-color: #f8f9fa;
-  border-bottom: 1px solid rgba(0,0,0,0.05);
+.terminal-wrapper.light .premium-header {
+  background-color: rgba(248, 249, 250, 0.8);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 
-.terminal-title {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.terminal-type-icon {
-  width: 32px;
-  height: 32px;
-  background-color: var(--accent-blue);
-  color: white;
-  border-radius: 8px;
+.gemini-logo-container {
+  width: 40px;
+  height: 40px;
+  background-color: var(--bg-hover);
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.3s ease;
 }
 
-.terminal-type-icon.active {
-  animation: pulse-border 1.5s infinite;
-  background-color: #ffffff;
-  color: var(--accent-blue);
+.gemini-logo-container.pulsing {
+  animation: gemini-sparkle 2s infinite;
 }
 
-@keyframes pulse-border {
-  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(66, 133, 244, 0.4); }
-  70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(66, 133, 244, 0); }
-  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(66, 133, 244, 0); }
+@keyframes gemini-sparkle {
+  0% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(66, 133, 244, 0)); }
+  50% { transform: scale(1.1); filter: drop-shadow(0 0 8px rgba(155, 114, 203, 0.5)); }
+  100% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(66, 133, 244, 0)); }
 }
 
 .terminal-name {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 500;
-  color: #e3e3e3;
+  color: var(--text-primary);
   letter-spacing: -0.2px;
 }
 
-.terminal-wrapper.light .terminal-name {
-  color: #1f1f1f;
-}
-
-.instance-pill {
+.instance-status-pill {
   display: flex;
   align-items: center;
-  gap: 8px;
-  background-color: rgba(255,255,255,0.06);
-  padding: 6px 14px;
-  border-radius: 20px;
-  font-size: 12px;
+  gap: 10px;
+  background-color: var(--bg-hover);
+  padding: 8px 16px;
+  border-radius: 24px;
+  font-size: 13px;
   font-weight: 500;
-  color: #9aa0a6;
-  border: 1px solid rgba(255,255,255,0.05);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
 }
 
-.terminal-wrapper.light .instance-pill {
-  background-color: rgba(0,0,0,0.04);
-  color: #444746;
-  border-color: rgba(0,0,0,0.05);
-}
-
-.status-dot-inner {
+.status-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
 }
-.status-dot-inner.connected { background-color: #10b981; box-shadow: 0 0 10px rgba(16, 185, 129, 0.4); }
-.status-dot-inner.connecting { background-color: #fbbc04; animation: pulse 1s infinite; }
-.status-dot-inner.disconnected { background-color: #d93025; }
+.status-dot.connected { background-color: #10b981; box-shadow: 0 0 8px #10b981; }
+.status-dot.connecting { background-color: #fbbc04; animation: pulse 1s infinite; }
+.status-dot.disconnected { background-color: #d93025; }
 
 .toolbar-actions-group {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
 }
 
-.action-pill-group {
+.action-button-group {
   display: flex;
-  background-color: rgba(255,255,255,0.06);
+  background-color: var(--bg-hover);
   border-radius: 20px;
-  padding: 2px;
-  border: 1px solid rgba(255,255,255,0.05);
+  padding: 4px;
+  border: 1px solid var(--border-subtle);
 }
 
-.terminal-wrapper.light .action-pill-group {
-  background-color: rgba(0,0,0,0.04);
-  border-color: rgba(0,0,0,0.05);
-}
-
-.terminal-action-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 16px;
+.terminal-btn-gemini {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
   border: none;
   background: transparent;
-  color: #9aa0a6;
+  color: var(--text-dim);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s;
 }
 
-.terminal-action-btn:hover {
-  background-color: rgba(255,255,255,0.1);
-  color: #ffffff;
-}
-
-.terminal-wrapper.light .terminal-action-btn:hover {
-  background-color: #ffffff;
-  color: var(--accent-blue);
+.terminal-btn-gemini:hover {
+  background-color: var(--bg-main);
+  color: var(--text-primary);
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.terminal-btn-official-accent {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background-color: var(--accent-blue);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(66, 133, 244, 0.3);
+}
+
+.terminal-btn-official-accent:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(66, 133, 244, 0.4);
 }
 
 .terminal-inner {
   flex: 1;
-  padding: 12px 16px;
+  padding: 16px 20px;
   background-color: transparent;
   overflow: hidden;
   position: relative;
 }
 
-/* Scrollbar for xterm */
-.terminal-inner .xterm-viewport::-webkit-scrollbar {
-  width: 8px;
-}
-.terminal-inner .xterm-viewport::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.1);
-  border-radius: 10px;
-}
-.terminal-wrapper.light .terminal-inner .xterm-viewport::-webkit-scrollbar-thumb {
-  background: rgba(0,0,0,0.1);
+.xterm-container-gemini {
+  width: 100%;
+  height: 100%;
 }
 
-/* Premium Disconnect Overlay */
-.terminal-overlay.premium-glass {
+.scroll-bottom-fab {
   position: absolute;
-  inset: 0;
-  background-color: rgba(0,0,0,0.4);
-  backdrop-filter: blur(12px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 50;
-  animation: fadeIn 0.4s ease;
-}
-
-.overlay-card {
-  background-color: #1e1f20;
-  padding: 40px;
-  border-radius: 28px;
-  max-width: 420px;
-  width: 90%;
-  text-align: center;
-  box-shadow: 0 12px 48px rgba(0,0,0,0.4);
-  border: 1px solid rgba(255,255,255,0.1);
-  transform: translateY(0);
-  animation: slideUp 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.terminal-wrapper.light .overlay-card {
-  background-color: #ffffff;
-  box-shadow: 0 12px 48px rgba(0,0,0,0.1);
-  border-color: rgba(0,0,0,0.05);
-}
-
-.overlay-error-icon {
-  width: 64px;
-  height: 64px;
-  background-color: rgba(217, 48, 37, 0.1);
-  color: #d93025;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 24px;
-  font-size: 32px;
-}
-
-.overlay-card h3 {
-  font-size: 22px;
-  font-weight: 500;
-  margin-bottom: 12px;
-  color: white;
-}
-
-.terminal-wrapper.light .overlay-card h3 {
-  color: #1f1f1f;
-}
-
-.overlay-card p {
-  font-size: 14px;
-  line-height: 1.6;
-  color: #9aa0a6;
-  margin-bottom: 32px;
-}
-
-.reconnect-btn-official {
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
   background-color: var(--accent-blue);
   color: white;
   border: none;
-  padding: 12px 32px;
-  border-radius: 24px;
+  padding: 12px 24px;
+  border-radius: 30px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 0 auto;
-  transition: all 0.2s;
+  box-shadow: 0 4px 20px rgba(11, 87, 208, 0.4);
+  z-index: 100;
+  animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.reconnect-btn-official:hover {
-  background-color: #1a73e8;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(11, 87, 208, 0.3);
-}
-
-.scroll-bottom-btn {
+.terminal-overlay-modern {
   position: absolute;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  background-color: var(--accent-blue);
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  animation: fadeIn 0.4s ease-out;
+}
+
+.overlay-card-gemini {
+  padding: 48px;
+  border-radius: 36px;
+  max-width: 480px;
+  width: 90%;
+  text-align: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.overlay-card-gemini.glass-effect {
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05), inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+}
+
+.dark .overlay-card-gemini.glass-effect {
+  background: rgba(30, 31, 32, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.3);
+}
+
+.gemini-sparkle-container {
+  width: 80px;
+  height: 80px;
+  background: linear-gradient(135deg, rgba(66, 133, 244, 0.1), rgba(155, 114, 203, 0.1));
+  border-radius: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 32px;
+  position: relative;
+}
+
+.gemini-sparkle-container::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 26px;
+  background: linear-gradient(135deg, #4285f4, #9b72cb, #d96570);
+  opacity: 0.3;
+  z-index: -1;
+  filter: blur(8px);
+}
+
+.overlay-card-gemini h3 {
+  font-size: 26px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, #1f1f1f 30%, #444);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.dark .overlay-card-gemini h3 {
+  background: linear-gradient(135deg, #e3e3e3 30%, #aaa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.overlay-card-gemini p {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin-bottom: 40px;
+  padding: 0 10px;
+}
+
+.btn-gemini-glow {
+  background: linear-gradient(135deg, #4285f4, #9b72cb);
   color: white;
   border: none;
-  padding: 10px 20px;
-  border-radius: 24px;
-  font-size: 13px;
+  padding: 16px 44px;
+  border-radius: 30px;
+  font-size: 16px;
   font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
+  gap: 12px;
+  margin: 0 auto;
+  transition: all 0.3s;
+  box-shadow: 0 4px 15px rgba(66, 133, 244, 0.3);
+}
+
+.btn-gemini-glow:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 8px 25px rgba(66, 133, 244, 0.4), 0 0 15px rgba(155, 114, 203, 0.3);
+}
+
+.btn-gemini-glow:active {
+  transform: translateY(0);
+}
+
+.overlay-card-gemini.glass-effect {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 60px 40px;
+  animation: overlayEntrance 0.7s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.gemini-loader-container {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 32px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gemini-loader-ring {
+  position: absolute;
+  inset: -4px;
+  border: 3px solid transparent;
+  border-top-color: #4285F4;
+  border-right-color: #9B72CB;
+  border-bottom-color: #D96570;
+  border-radius: 50%;
+  animation: spin 1.5s linear infinite;
+}
+
+.gemini-loader-ring::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border: 2px solid rgba(66, 133, 244, 0.1);
+  border-radius: 50%;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.dark .overlay-card-gemini.glass-effect {
+  background: rgba(30, 31, 32, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.gemini-sparkle-container {
+  width: 80px;
+  height: 80px;
+  background: linear-gradient(135deg, rgba(66, 133, 244, 0.1), rgba(155, 114, 203, 0.1));
+  border-radius: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 32px;
+  position: relative;
+}
+
+.gemini-sparkle-container::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  background: linear-gradient(135deg, #4285F4, #9B72CB, #D96570);
+  border-radius: 26px;
+  z-index: -1;
+  opacity: 0.3;
+}
+
+.btn-gemini-glow {
+  background: linear-gradient(90deg, #4285F4, #9B72CB);
+  color: white;
+  border: none;
+  padding: 16px 48px;
+  border-radius: 32px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 auto;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 15px rgba(66, 133, 244, 0.3);
+}
+
+.btn-gemini-glow:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 8px 25px rgba(155, 114, 203, 0.4);
+  filter: brightness(1.1);
+}
+
+.btn-gemini-glow:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.instance-status-pill-premium {
+  display: flex;
+  align-items: center;
   gap: 8px;
-  box-shadow: 0 4px 12px rgba(11, 87, 208, 0.4);
-  z-index: 40;
-  animation: slideUp 0.3s ease-out;
+  padding: 6px 12px;
+  background: rgba(66, 133, 244, 0.05);
+  border: 1px solid rgba(66, 133, 244, 0.1);
+  border-radius: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.status-glow-ring {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  left: 12px;
+  border-radius: 50%;
+  filter: blur(4px);
+  z-index: 0;
+}
+
+.status-glow-ring.connected {
+  background: #34a853;
+  animation: status-pulse 2s infinite;
+}
+
+.status-dot-v2 {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  position: relative;
+  z-index: 1;
+}
+
+.status-dot-v2.connected { background: #34a853; }
+.status-dot-v2.connecting { background: #fbbc04; animation: blink 1s infinite; }
+.status-dot-v2.disconnected { background: #ea4335; }
+
+.status-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.gemini-sparkle-path {
+  animation: sparkle-rotate 4s linear infinite;
+  transform-origin: center;
+}
+
+@keyframes status-pulse {
+  0% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(2.5); opacity: 0; }
+  100% { transform: scale(1); opacity: 0; }
+}
+
+@keyframes sparkle-rotate {
+  0% { transform: scale(1) rotate(0deg); opacity: 1; }
+  25% { transform: scale(1.1) rotate(5deg); opacity: 0.9; }
+  50% { transform: scale(1) rotate(0deg); opacity: 1; }
+  75% { transform: scale(1.1) rotate(-5deg); opacity: 0.9; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+@keyframes blink {
+  0% { opacity: 1; }
+  50% { opacity: 0.4; }
+  100% { opacity: 1; }
+}
+
+.hidden-input-gemini {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.overlay-card-gemini.error-border {
+  border: 1px solid rgba(234, 67, 53, 0.4);
+}
+
+.gemini-error-icon-container {
+  width: 80px;
+  height: 80px;
+  background: rgba(234, 67, 53, 0.1);
+  border-radius: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 32px;
+  color: #ea4335;
+}
+
+.error-msg-detail {
+  font-family: 'Google Sans Mono', monospace;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 12px;
+  border-radius: 12px;
+  font-size: 13px !important;
+  word-break: break-all;
+}
+
+.btn-gemini-glow.error-bg {
+  background: linear-gradient(90deg, #ea4335, #d93025);
+  box-shadow: 0 4px 15px rgba(234, 67, 53, 0.3);
+}
+
+.btn-gemini-glow.error-bg:hover {
+  box-shadow: 0 8px 25px rgba(234, 67, 53, 0.4);
 }
 
 @keyframes slideUp {
-  from { transform: translateY(20px) translateX(-50%); opacity: 0; }
+  from { transform: translateY(30px) translateX(-50%); opacity: 0; }
   to { transform: translateY(0) translateX(-50%); opacity: 1; }
 }
 
-.terminal-wrapper.fullscreen-focus {
-  position: fixed;
-  inset: 0;
-  z-index: 2000;
-  border-radius: 0;
-  border: none;
-  width: 100vw;
-  height: 100vh;
-  max-width: none;
+@keyframes overlayEntrance {
+  from { transform: translateY(40px) scale(0.95); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
 }
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
