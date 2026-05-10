@@ -158,8 +158,15 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
         )}
 
         {isLoading && transcript.length === 0 && (
-          <div className="loading-history">
-            <div className="spinner" />
+          <div className="chat-flow">
+            {[1, 2, 3].map(i => (
+              <div key={i} className={`chat-bubble assistant`}>
+                <div className="bubble-avatar skeleton" style={{ borderRadius: '50%' }} />
+                <div className="bubble-content">
+                  <div className="skeleton skeleton-bubble" />
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

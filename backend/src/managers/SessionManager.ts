@@ -23,7 +23,7 @@ export class SessionManager {
     return `${projectPath}:${uuid}`;
   }
 
-  static getOrCreateSession(uuid: string, projectPath: string): ISession {
+  static getOrCreateSession(uuid: string, projectPath: string, cols: number = 100, rows: number = 30): ISession {
     const sessionKey = this.getSessionKey(projectPath, uuid);
     
     // Clear any existing cleanup timeout if client returns
@@ -33,11 +33,14 @@ export class SessionManager {
     }
 
     if (this.sessions.has(sessionKey)) {
-      return this.sessions.get(sessionKey)!;
+      const existing = this.sessions.get(sessionKey)!;
+      // Re-sync size on reconnection
+      existing.pty.resize(cols, rows);
+      return existing;
     }
 
     const isNew = uuid.startsWith('new-');
-    console.log(`[SessionManager] ${isNew ? 'Creating NEW' : 'Resuming'} Gemini session at ${projectPath}`);
+    console.log(`[SessionManager] ${isNew ? 'Creating NEW' : 'Resuming'} Gemini session at ${projectPath} (${cols}x${rows})`);
     
     let ptyProcess: any;
     let useFallback = false;
@@ -52,8 +55,8 @@ export class SessionManager {
     try {
       ptyProcess = pty.spawn(geminiPath, args, {
         name: 'xterm-256color',
-        cols: 100,
-        rows: 30,
+        cols,
+        rows,
         cwd: projectPath,
         env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor', FORCE_COLOR: '1' } as any
       });
@@ -71,8 +74,8 @@ export class SessionManager {
       const pyScript = `
 import pty, os, sys, select, termios, struct, fcntl
 
-def set_size(fd):
-    size = struct.pack("HHHH", 30, 100, 0, 0)
+def set_size(fd, rows, cols):
+    size = struct.pack("HHHH", rows, cols, 0, 0)
     fcntl.ioctl(fd, termios.TIOCSWINSZ, size)
 
 def bridge():
@@ -80,7 +83,7 @@ def bridge():
     if pid == 0:
         os.execv(r'${geminiPath}', [r'${geminiPath}'] + ${JSON.stringify(pyArgs)})
     else:
-        set_size(fd)
+        set_size(fd, ${rows}, ${cols})
         try:
             while True:
                 # Multiplex between PTY and Stdin
@@ -113,6 +116,7 @@ if __name__ == "__main__":
       cp.stderr?.on('data', (data) => {
         const msg = data.toString();
         console.error(`[SessionManager] Fallback stderr: ${msg}`);
+        // Log all stderr but only show potential user-facing errors
         if (!msg.includes('tcgetattr') && !msg.includes('ioctl')) {
           onDataCb(`\x1b[31m[System Error] ${msg}\x1b[0m`);
         }

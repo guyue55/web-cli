@@ -1,6 +1,10 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { WebglAddon } from '@xterm/addon-webgl';
+import { Unicode11Addon } from '@xterm/addon-unicode11';
+import { WebLinksAddon } from '@xterm/addon-web-links';
+import { SearchAddon } from '@xterm/addon-search';
 import '@xterm/xterm/css/xterm.css';
 
 interface TerminalProps {
@@ -42,6 +46,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
   const xtermRef = useRef<XTerm | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const searchAddonRef = useRef<SearchAddon | null>(null);
 
   const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
   const [systemError, setSystemError] = useState<string | null>(null);
@@ -50,6 +55,9 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
   const [hasNewContent, setHasNewContent] = useState(false);
   const [isPulseActive, setIsPulseActive] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [isSearchVisible, setIsSearchVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const executionLockedRef = useRef<string | null>(null);
@@ -74,7 +82,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     }
   };
 
-  const connect = useCallback(() => {
+  const connect = useCallback((initialCols?: number, initialRows?: number) => {
     if (wsRef.current) {
       wsRef.current.onclose = null;
       wsRef.current.close();
@@ -85,22 +93,21 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     setSystemError(null);
 
     const host = window.location.hostname || 'localhost';
-    const wsUrl = `ws://${host}:3001?uuid=${uuid}&projectPath=${encodeURIComponent(projectPath)}`;
+    const dimensions = initialCols ? `&cols=${initialCols}&rows=${initialRows}` : '';
+    const wsUrl = `ws://${host}:3001?uuid=${uuid}&projectPath=${encodeURIComponent(projectPath)}${dimensions}`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
       setStatus('connected');
       reconnectAttemptsRef.current = 0;
-      // Accurate synchronization of TTY environment
-      setTimeout(() => {
-        if (ws.readyState === WebSocket.OPEN && xtermRef.current) {
-          fitAddonRef.current?.fit();
-          const { cols, rows } = xtermRef.current;
-          ws.send(JSON.stringify({ type: 'resize', cols, rows }));
-          xtermRef.current.focus();
-        }
-      }, 200);
+      
+      // Re-sync on open if not initially provided
+      if (!initialCols && xtermRef.current) {
+        fitAddonRef.current?.fit();
+        const { cols, rows } = xtermRef.current;
+        ws.send(JSON.stringify({ type: 'resize', cols, rows }));
+      }
 
       // Reliable execution warmup
       if (initialPrompt && executionLockedRef.current !== `${uuid}-${initialPrompt}`) {
@@ -109,15 +116,16 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
             ws.send(JSON.stringify({ type: 'input', data: initialPrompt + '\r' }));
             executionLockedRef.current = `${uuid}-${initialPrompt}`;
           }
-        }, 800);
+        }, 600);
       } else if (!initialPrompt) {
-        // Force interactive shell if no initial prompt
+        // Force refresh instead of simple newline
         setTimeout(() => {
           if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'input', data: '\r' }));
+            ws.send(JSON.stringify({ type: 'input', data: '\x0c' })); // Ctrl+L (Clear screen/Refresh)
           }
-        }, 500);
+        }, 400);
       }
+      
       setTimeout(() => {
         xtermRef.current?.focus();
         fitAddonRef.current?.fit();
@@ -178,37 +186,82 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     const term = new XTerm({
       cursorBlink: true,
       fontSize: 14,
-      fontFamily: '"Google Sans Mono", "JetBrains Mono", monospace',
+      fontFamily: '"Google Sans Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace',
       theme: {
         background: isDark ? '#131314' : '#ffffff',
         foreground: isDark ? '#e3e3e3' : '#1f1f1f',
         cursor: '#4285f4',
+        cursorAccent: isDark ? '#131314' : '#ffffff',
         selectionBackground: isDark ? 'rgba(138, 180, 248, 0.3)' : 'rgba(66, 133, 244, 0.2)',
         black: isDark ? '#000000' : '#3c4043',
-        brightBlack: isDark ? '#5f6368' : '#70757a',
+        red: '#ea4335',
+        green: '#34a853',
+        yellow: '#fbbc04',
+        blue: '#4285f4',
+        magenta: '#af5fd7',
+        cyan: '#00abc0',
         white: isDark ? '#e3e3e3' : '#ffffff',
+        brightBlack: isDark ? '#5f6368' : '#70757a',
+        brightRed: '#f28b82',
+        brightGreen: '#81c995',
+        brightYellow: '#fdd663',
+        brightBlue: '#8ab4f8',
+        brightMagenta: '#c58af9',
+        brightCyan: '#82d1f1',
+        brightWhite: isDark ? '#ffffff' : '#202124',
       },
       allowProposedApi: true,
       scrollback: 10000,
       cursorStyle: 'block',
-      convertEol: true, // Crucial for handle \n to \r\n correctly
+      cursorInactiveStyle: 'outline',
+      convertEol: true,
+      minimumContrastRatio: 4.5,
     });
     
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
+    
+    const unicode11Addon = new Unicode11Addon();
+    term.loadAddon(unicode11Addon);
+    term.unicode.activeVersion = '11';
+
+    const webLinksAddon = new WebLinksAddon();
+    term.loadAddon(webLinksAddon);
+
+    const searchAddon = new SearchAddon();
+    term.loadAddon(searchAddon);
+    searchAddonRef.current = searchAddon;
+
     term.open(terminalRef.current);
     
+    // Attempt to load WebGL addon for hardware acceleration
+    try {
+      const webglAddon = new WebglAddon();
+      term.loadAddon(webglAddon);
+    } catch (e) {
+      console.warn('[Terminal] WebGL addon failed to load, falling back to Canvas/DOM', e);
+    }
+
     xtermRef.current = term;
     fitAddonRef.current = fitAddon;
 
+    // Initial fit and connect with dimensions
+    fitAddon.fit();
+    connect(term.cols, term.rows);
+
+    let resizeTimeout: ReturnType<typeof setTimeout>;
     const ro = new ResizeObserver(() => {
-      if (xtermRef.current) {
-        try { fitAddon.fit(); } catch { /* ignore */ }
-      }
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        if (xtermRef.current) {
+          try { 
+            fitAddon.fit(); 
+            // The onResize callback below will handle sending the WS message
+          } catch { /* ignore */ }
+        }
+      }, 100);
     });
     ro.observe(terminalRef.current);
-
-    connect();
 
     term.onData(data => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -287,6 +340,11 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     }
   };
 
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    searchAddonRef.current?.findNext(query);
+  };
+
   return (
     <div className={`terminal-wrapper ${theme || 'light'} ${isFocusMode ? 'fullscreen-focus' : ''}`}>
       <div className="terminal-toolbar premium-header">
@@ -304,7 +362,36 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
         </div>
         
         <div className="toolbar-actions-group">
+           {isSearchVisible && (
+             <div className="terminal-search-bar">
+               <input 
+                 type="text" 
+                 placeholder="在终端中查找..." 
+                 value={searchQuery}
+                 onChange={(e) => handleSearch(e.target.value)}
+                 onKeyDown={(e) => {
+                   if (e.key === 'Enter') searchAddonRef.current?.findNext(searchQuery);
+                   if (e.key === 'Escape') setIsSearchVisible(false);
+                 }}
+                 autoFocus
+               />
+               <button onClick={() => searchAddonRef.current?.findPrevious(searchQuery)}>
+                 <span className="material-symbols-outlined">expand_less</span>
+               </button>
+               <button onClick={() => searchAddonRef.current?.findNext(searchQuery)}>
+                 <span className="material-symbols-outlined">expand_more</span>
+               </button>
+               <button onClick={() => setIsSearchVisible(false)}>
+                 <span className="material-symbols-outlined">close</span>
+               </button>
+             </div>
+           )}
+
            <div className="action-button-group">
+             <button className={`terminal-btn-gemini ${isSearchVisible ? 'active' : ''}`} title="查找 (Ctrl+F)" 
+               onClick={() => setIsSearchVisible(!isSearchVisible)}>
+               <span className="material-symbols-outlined" style={{ fontSize: 18 }}>search</span>
+             </button>
              <button className="terminal-btn-gemini" title="中断 (Ctrl+C)" 
                onClick={() => wsRef.current?.send(JSON.stringify({ type: 'input', data: '\x03' }))}>
                <IconInterrupt />
@@ -328,7 +415,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
                onClick={() => setIsFocusMode(!isFocusMode)}>
                {isFocusMode ? <IconShrink /> : <IconExpand />}
              </button>
-             <button className="terminal-btn-official-accent" title="重新启动" onClick={connect}>
+             <button className="terminal-btn-official-accent" title="重新启动" onClick={() => connect()}>
                <IconRefresh />
              </button>
            </div>
@@ -378,7 +465,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
                  </div>
                  <h3>会话已就绪</h3>
                  <p>执行环境已准备就绪。由于安全策略，请点击下方按钮激活交互式终端会话。</p>
-                 <button className="btn-gemini-glow" onClick={connect}>
+                 <button className="btn-gemini-glow" onClick={() => connect()}>
                     <IconRefresh /> 开启交互会话
                  </button>
               </div>
@@ -393,7 +480,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
                  </div>
                  <h3>执行环境报错</h3>
                  <p className="error-msg-detail">{systemError}</p>
-                 <button className="btn-gemini-glow error-bg" onClick={connect}>
+                 <button className="btn-gemini-glow error-bg" onClick={() => connect()}>
                     <IconRefresh /> 重试连接
                  </button>
               </div>

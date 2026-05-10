@@ -41,13 +41,18 @@ const FileBrowser: React.FC = () => {
   return (
     <div className="file-browser">
       <div className="file-browser-header">
-        <h3>Files</h3>
-        <button onClick={goUp}>↑</button>
+        <h3>文件</h3>
+        <button onClick={goUp} title="返回上级">
+          <span className="material-symbols-outlined" style={{ fontSize: 20 }}>arrow_upward</span>
+        </button>
       </div>
       <ul className="file-list">
         {files.map(file => (
           <li key={file.path} onClick={() => handleFileClick(file)}>
-            {file.isDirectory ? '📁' : '📄'} {file.name}
+            <span className="material-symbols-outlined file-icon" style={{ fontSize: 18, color: file.isDirectory ? 'var(--accent-blue)' : 'var(--text-dim)' }}>
+              {file.isDirectory ? 'folder' : 'description'}
+            </span>
+            <span className="file-name">{file.name}</span>
           </li>
         ))}
       </ul>

@@ -18,6 +18,8 @@ export function setupWebSocket(wss: WebSocketServer) {
     // Route 2: Terminal Session (Resume by UUID)
     const uuid = url.searchParams.get('uuid');
     const projectPath = url.searchParams.get('projectPath');
+    const cols = parseInt(url.searchParams.get('cols') || '100');
+    const rows = parseInt(url.searchParams.get('rows') || '30');
 
     if (!uuid || !projectPath) {
       return;
@@ -26,7 +28,7 @@ export function setupWebSocket(wss: WebSocketServer) {
     const sessionKey = SessionManager.getSessionKey(projectPath, uuid);
 
     try {
-      const session = SessionManager.getOrCreateSession(uuid, projectPath);
+      const session = SessionManager.getOrCreateSession(uuid, projectPath, cols, rows);
       session.clients.add(ws);
       ws.send(JSON.stringify({ type: 'output', data: session.buffer }));
 
