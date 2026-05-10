@@ -10,7 +10,7 @@ interface TerminalProps {
   theme?: string;
 }
 
-// --- Premium SVG Assets (Gemini Official Style) ---
+// --- Premium SVG Assets (Official Style) ---
 const IconInterrupt = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>;
 const IconClear = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>;
 const IconCopy = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>;
@@ -19,7 +19,7 @@ const IconDownload = () => <svg width="16" height="16" viewBox="0 0 24 24" fill=
 const IconRefresh = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>;
 const IconExpand = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>;
 const IconShrink = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>;
-const IconArrowDown = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M7 13l5 5 5-5M7 6l5 5 5-5"/></svg>;
+const IconArrowDown = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M7 13l5 5 5-5M7 6l5 5 5-5"/></svg>;
 const IconKeyboard = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><path d="M6 8h.01"/><path d="M10 8h.01"/><path d="M14 8h.01"/><path d="M18 8h.01"/><path d="M6 12h.01"/><path d="M10 12h.01"/><path d="M14 12h.01"/><path d="M18 12h.01"/><path d="M7 16h10"/></svg>;
 
 // --- Helper Utilities ---
@@ -32,10 +32,11 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
   const wsRef = useRef<WebSocket | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   
-  const [status, setStatus] = useState<'connecting' | 'online' | 'offline'>('connecting');
+  const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
   const [isCopied, setIsCopied] = useState(false);
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [hasNewContent, setHasNewContent] = useState(false);
+  const [isPulseActive, setIsPulseActive] = useState(false);
   const executionLockedRef = useRef<string | null>(null);
 
   const connect = useCallback(() => {
@@ -51,7 +52,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     wsRef.current = ws;
 
     ws.onopen = () => {
-      setStatus('online');
+      setStatus('connected');
       // Atomic command execution: ensure specific command runs only once per unique session context
       if (initialPrompt && executionLockedRef.current !== `${uuid}-${initialPrompt}`) {
         setTimeout(() => {
@@ -61,17 +62,29 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
           }
         }, 800);
       }
-      setTimeout(() => fitAddonRef.current?.fit(), 200);
+      setTimeout(() => fitAddonRef.current?.fit(), 100);
     };
     
-    ws.onclose = () => setStatus('offline');
-    ws.onerror = () => setStatus('offline');
+    ws.onclose = () => setStatus('disconnected');
+    ws.onerror = () => setStatus('disconnected');
     
     ws.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
         if (payload.type === 'output' && xtermRef.current) {
-          xtermRef.current.write(payload.data);
+          const term = xtermRef.current;
+          // Sticky scroll logic: only auto-scroll if user is already at the bottom
+          const isAtBottom = term.buffer.active.viewportY >= term.buffer.active.baseY - 1;
+          
+          term.write(payload.data);
+          
+          if (isAtBottom) {
+            term.scrollToBottom();
+          }
+
+          // Trigger activity pulse
+          setIsPulseActive(true);
+          setTimeout(() => setIsPulseActive(false), 200);
         }
       } catch (e) {}
     };
@@ -80,11 +93,12 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
   useEffect(() => {
     if (!terminalRef.current) return;
 
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     const isDark = theme === 'dark';
     const term = new XTerm({
       cursorBlink: true,
-      fontSize: 14,
-      fontFamily: '"JetBrains Mono", "Cascadia Code", Menlo, Monaco, monospace',
+      fontSize: isMobile ? 12 : 14,
+      fontFamily: '"JetBrains Mono", "Cascadia Code", Menlo, monospace',
       theme: {
         background: isDark ? '#131314' : '#f8f9fa',
         foreground: isDark ? '#e3e3e3' : '#202124',
@@ -186,13 +200,13 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     <div className={`terminal-wrapper ${theme || 'light'} ${isFocusMode ? 'fullscreen-focus' : ''}`}>
       <div className="terminal-toolbar">
         <div className="terminal-title">
-           <span className="terminal-type-icon">$_</span>
+           <span className={`terminal-type-icon ${isPulseActive ? 'active' : ''}`}>$_</span>
            <span className="terminal-name">执行实例</span>
         </div>
 
-        <div className="instance-pill" title={`Path: ${projectPath}`}>
+        <div className="instance-pill" title={`CWD: ${projectPath}`}>
            <span className={`status-dot-inner ${status}`} />
-           <span>{status === 'online' ? '就绪' : status === 'connecting' ? '启动中' : '离线'}</span>
+           <span>{status === 'connected' ? '就绪' : status === 'connecting' ? '启动中' : '离线'}</span>
         </div>
         
         <div className="toolbar-actions">
@@ -209,14 +223,14 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
            <button className="terminal-action-btn" title="导出日志 (.log)" onClick={handleDownload}>
              <span className="icon-span"><IconDownload /></span>
            </button>
-           <button className="terminal-action-btn focus-toggle" title={isFocusMode ? "退出全屏" : "全屏模式"} 
+           <button className="terminal-action-btn focus-toggle" title={isFocusMode ? "常规视图" : "全屏模式"} 
              onClick={() => setIsFocusMode(!isFocusMode)}>
              <span className="icon-span">{isFocusMode ? <IconShrink /> : <IconExpand />}</span>
            </button>
            <button className="terminal-action-btn" title="重启实例" onClick={connect}>
              <span className="icon-span"><IconRefresh /></span>
            </button>
-           <button className="terminal-action-btn mobile-keyboard-btn" title="唤起键盘" onClick={() => inputRef.current?.focus()}>
+           <button className="terminal-action-btn mobile-keyboard-btn" onClick={() => inputRef.current?.focus()}>
              <span className="icon-span"><IconKeyboard /></span>
            </button>
         </div>
@@ -231,14 +245,14 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
           </button>
         )}
 
-        {status === 'offline' && (
+        {status === 'disconnected' && (
            <div className="terminal-overlay">
               <div className="overlay-content">
                  <div className="overlay-icon-container"><IconInterrupt /></div>
                  <h3>交互实例已停止</h3>
                  <p>该终端会话已断开连接。这可能是由于网络波动或长时间无操作引起的。</p>
                  <button className="reconnect-btn-premium" onClick={connect}>
-                   <IconRefresh /> 重新启动实例
+                   <span className="icon-span"><IconRefresh /></span> 重新启动实例
                  </button>
               </div>
            </div>

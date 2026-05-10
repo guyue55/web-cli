@@ -1229,3 +1229,24 @@ body, html, #root {
 .terminal-wrapper.light .overlay-icon-container {
   opacity: 0.5;
 }
+
+/* Terminal Heartbeat & Animation Extensions */
+.terminal-type-icon.active {
+  animation: terminal-pulse 0.2s ease-out;
+  background-color: #ffffff;
+  color: var(--accent-blue);
+}
+
+@keyframes terminal-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+.terminal-wrapper.fullscreen-focus {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  border-radius: 0;
+  border: none;
+}
