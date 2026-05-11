@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
@@ -435,7 +436,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
         }
       }
     } catch (err) {
-      console.error('Failed to read clipboard', err);
+      console.error('Terminal Paste Error:', err);
     }
     setContextMenu(null);
     triggerHaptic();
@@ -444,10 +445,12 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
   const handleClear = useCallback(() => {
     if (xtermRef.current) {
       xtermRef.current.clear();
-      // Send Ctrl+L (\x0c) to re-draw shell prompt
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'input', data: '\x0c' }));
-      }
+    }
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      // CSI 2 J: Clear entire screen
+      // CSI H: Home cursor
+      // \x0c: Ctrl+L (Force shell prompt redraw)
+      wsRef.current.send(JSON.stringify({ type: 'input', data: '\x1b[2J\x1b[H\x0c' }));
     }
     setContextMenu(null);
     triggerHaptic();
@@ -820,18 +823,16 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     const handleContainerClick = () => { term.focus(); setContextMenu(null); };
     const handleContextMenu = (e: MouseEvent) => { 
       e.preventDefault(); 
-      if (!wrapperRef.current) return;
-      const rect = wrapperRef.current.getBoundingClientRect();
-      let x = e.clientX - rect.left;
-      let y = e.clientY - rect.top;
+      let x = e.clientX;
+      let y = e.clientY;
       
-      // Boundary checks (Industrial Grade)
+      // Viewport boundary checks (Industrial Grade)
       const menuWidth = 190;
       const menuHeight = 250;
-      if (x + menuWidth > rect.width) x -= menuWidth;
-      if (y + menuHeight > rect.height) y -= menuHeight;
-      if (x < 5) x = 5;
-      if (y < 5) y = 5;
+      if (x + menuWidth > window.innerWidth) x -= menuWidth;
+      if (y + menuHeight > window.innerHeight) y -= menuHeight;
+      if (x < 10) x = 10;
+      if (y < 10) y = 10;
 
       setContextMenu({ x, y }); 
     };
@@ -914,7 +915,17 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
                e.preventDefault();
                if (!wrapperRef.current) return;
                const rect = wrapperRef.current.getBoundingClientRect();
-               setTabContextMenu({ x: e.clientX - rect.left, y: e.clientY - rect.top, id: tab.id });
+               let x = e.clientX - rect.left;
+               let y = e.clientY - rect.top;
+               
+               const menuWidth = 180;
+               const menuHeight = 160;
+               if (x + menuWidth > rect.width) x -= menuWidth;
+               if (y + menuHeight > rect.height) y -= menuHeight;
+               if (x < 5) x = 5;
+               if (y < 5) y = 5;
+
+               setTabContextMenu({ x, y, id: tab.id });
              }}
            >
              <IconProcess name={tab.label} />
@@ -958,9 +969,10 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       
       <div className="terminal-inner">
         <div ref={terminalRef} className="xterm-container-gemini" />
-        
-        {isPaletteOpen && (
-          <div className="terminal-command-palette glass-effect" onClick={(e) => e.stopPropagation()}>
+      </div>
+      
+      {isPaletteOpen && createPortal(
+          <div className="terminal-command-palette glass-effect" style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 9999 }} onClick={(e) => e.stopPropagation()}>
             <div className="palette-search-wrapper">
               <span className="material-symbols-outlined">search</span>
               <input 
@@ -995,11 +1007,12 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
                 </div>
               ))}
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
-        {selectionPosition && (
-          <div className="terminal-selection-popup glass-effect" style={{ top: selectionPosition.y, left: selectionPosition.x }}>
+        {selectionPosition && createPortal(
+          <div className="terminal-selection-popup glass-effect" style={{ position: 'fixed', top: selectionPosition.y, left: selectionPosition.x, zIndex: 9999 }}>
             <button onClick={handleCopy}>
               {isCopied ? <><IconCheck /> 已复制</> : <><IconCopy /> 复制</>}
             </button>
@@ -1011,11 +1024,12 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
             <button onClick={() => explainWithGemini()} className="ai-btn-small">
                <span className="material-symbols-outlined">auto_awesome</span> 解释
             </button>
-          </div>
+          </div>,
+          document.body
         )}
 
-        {tabContextMenu && (
-          <div className="terminal-context-menu glass-effect tab-menu" style={{ top: tabContextMenu.y, left: tabContextMenu.x }} onClick={(e) => e.stopPropagation()}>
+        {tabContextMenu && createPortal(
+          <div className="terminal-context-menu glass-effect tab-menu" style={{ position: 'fixed', top: tabContextMenu.y, left: tabContextMenu.x, zIndex: 9999 }} onClick={(e) => e.stopPropagation()}>
             <div className="menu-header-label">标记颜色</div>
             <div className="color-picker-row">
                <div className="color-circle blue" onClick={() => setTabColor(tabContextMenu.id, 'blue')} />
@@ -1026,11 +1040,12 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
             <div className="menu-divider" />
             <div className="menu-item" onClick={() => { setEditingTabId(tabContextMenu.id); setTabContextMenu(null); }}>重命名</div>
             <div className="menu-item error-text" onClick={(e) => { removeTab(e, tabContextMenu.id); setTabContextMenu(null); }}>关闭标签</div>
-          </div>
+          </div>,
+          document.body
         )}
 
-        {contextMenu && (
-          <div className="terminal-context-menu glass-effect" style={{ top: contextMenu.y, left: contextMenu.x }} onClick={(e) => e.stopPropagation()}>
+        {contextMenu && createPortal(
+          <div className="terminal-context-menu glass-effect" style={{ position: 'fixed', top: contextMenu.y, left: contextMenu.x, zIndex: 9999 }} onClick={(e) => e.stopPropagation()}>
             <div className="menu-item ai-action" onClick={() => explainWithGemini()}>
               <span className="material-symbols-outlined">auto_awesome</span>
               交给 Gemini 解释 (Explain)
@@ -1041,7 +1056,8 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
             <div className="menu-divider" />
             <div className="menu-item" onClick={handleDownload}><IconDownload /> 下载完整日志</div>
             <div className="menu-item" onClick={handleClear}><IconClear /> 清除屏幕 (Clear)</div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {isMobile && isHelperVisible && status === 'connected' && (
@@ -1106,7 +1122,6 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
               </div>
            </div>
         )}
-      </div>
 
       <TerminalStatusBar ws={wsInstance} status={status} />
     </div>
