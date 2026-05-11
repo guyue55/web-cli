@@ -429,22 +429,36 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
 
   const handlePaste = useCallback(async () => {
     try {
-      if (navigator.clipboard && navigator.clipboard.readText) {
-        const text = await navigator.clipboard.readText();
-        if (text && wsRef.current?.readyState === WebSocket.OPEN) {
-          wsRef.current.send(JSON.stringify({ type: 'input', data: text }));
-        }
+      // Industrial-grade check: Clipboard API requires HTTPS or localhost
+      if (!navigator.clipboard || !navigator.clipboard.readText) {
+        const reason = !window.isSecureContext 
+          ? '浏览器安全策略限制：非 HTTPS 环境无法通过菜单粘贴。请使用 Ctrl+V 或切换至 HTTPS/Localhost。' 
+          : '您的浏览器可能禁用了剪贴板访问。请在地址栏权限设置中允许“剪贴板”访问。';
+        throw new Error(reason);
       }
-    } catch (err) {
+      
+      const text = await navigator.clipboard.readText();
+      if (text && wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'input', data: text }));
+      }
+    } catch (err: unknown) {
       console.error('Terminal Paste Error:', err);
+      const error = err as Error;
+      if (error.name === 'NotAllowedError') {
+        alert('无法访问剪贴板。请在浏览器权限设置中允许“剪贴板”读取，或直接使用键盘快捷键 Ctrl+V / Cmd+V。');
+      } else {
+        alert(error.message || '粘贴失败，请检查浏览器权限。');
+      }
+    } finally {
+      setContextMenu(null);
+      triggerHaptic();
     }
-    setContextMenu(null);
-    triggerHaptic();
   }, [triggerHaptic]);
 
   const handleClear = useCallback(() => {
     if (xtermRef.current) {
       xtermRef.current.clear();
+      xtermRef.current.reset();
     }
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       // CSI 2 J: Clear entire screen
