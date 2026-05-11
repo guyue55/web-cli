@@ -1,6 +1,8 @@
 import * as pty from 'node-pty';
 import { spawn } from 'child_process';
 import { WebSocket } from 'ws';
+import { StringDecoder } from 'string_decoder';
+import fs from 'fs';
 
 export interface ISession {
   id: string; // UUID
@@ -66,13 +68,13 @@ export class SessionManager {
     }
 
     if (useFallback) {
-      // Industrial-grade Python PTY Bridge: Binary-safe, Multiplexed, Debounced Resize
+      // Industrial-grade Python PTY Bridge: Binary-safe, Threaded, Debounced Resize
       const pyArgs = isNew ? 
         ['--skip-trust', '--approval-mode', 'yolo', '--prompt-interactive', ' '] : 
         ['--resume', uuid, '--skip-trust', '--approval-mode', 'yolo', '--prompt-interactive', ' '];
       
       const pyScript = `
-import pty, os, sys, select, termios, struct, fcntl, signal, time
+import pty, os, sys, select, termios, struct, fcntl, signal, time, threading
 
 size_file = "/tmp/gemini-term-size-${uuid}.tmp"
 
@@ -89,7 +91,6 @@ def set_size(fd):
     except: pass
 
 def bridge():
-    import threading
     pid, fd = pty.fork()
     if pid == 0:
         os.execv(r'${geminiPath}', [r'${geminiPath}'] + ${JSON.stringify(pyArgs)})
@@ -122,7 +123,6 @@ def bridge():
         t2 = threading.Thread(target=stdin_to_pty, daemon=True)
         t1.start()
         t2.start()
-        
         try:
             while t1.is_alive(): time.sleep(0.5)
         except: pass
@@ -133,26 +133,29 @@ if __name__ == "__main__":
     bridge()
 `.trim();
       
-      console.log(`[SessionManager] Spawning Binary-Safe Python PTY Bridge...`);
+      console.log(`[SessionManager] Spawning Threaded Binary-Safe Python Bridge...`);
       const cp = spawn('/usr/bin/python3', ['-u', '-c', pyScript], {
         cwd: projectPath,
         env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor', FORCE_COLOR: '1', LANG: 'en_US.UTF-8' } as any,
         stdio: ['pipe', 'pipe', 'pipe']
       });
 
+      const decoder = new StringDecoder('utf8');
       let onDataCb: (data: string) => void = () => {};
       let onExitCb: (status: { exitCode: number; signal?: number }) => void = () => {};
 
-      cp.stdout?.on('data', (data) => onDataCb(data.toString()));
+      cp.stdout?.on('data', (chunk: Buffer) => {
+        onDataCb(decoder.write(chunk));
+      });
       cp.stderr?.on('data', (data) => {
         const msg = data.toString();
-        console.error(`[SessionManager] Fallback stderr: ${msg}`);
+        console.error(`[SessionManager] PTY Bridge Error: ${msg}`);
         if (!msg.includes('tcgetattr') && !msg.includes('ioctl')) {
           onDataCb(`\x1b[31m[System Error] ${msg}\x1b[0m`);
         }
       });
       cp.on('error', (err) => {
-        console.error(`[SessionManager] Fallback spawn error: ${err}`);
+        console.error(`[SessionManager] PTY Bridge Failed: ${err}`);
         onDataCb(`\x1b[31m[Critical Error] Failed to start gemini process: ${err.message}\x1b[0m`);
         onExitCb({ exitCode: 1 });
       });
@@ -166,11 +169,10 @@ if __name__ == "__main__":
         },
         kill: () => {
           cp.kill();
-          try { require('fs').unlinkSync(sizeFilePath); } catch (e) {}
+          try { fs.unlinkSync(sizeFilePath); } catch (e) {}
         },
         resize: (newCols: number, newRows: number) => {
           try {
-            const fs = require('fs');
             fs.writeFileSync(sizeFilePath, `${newRows},${newCols}`);
             cp.kill('SIGUSR1');
           } catch (e) {

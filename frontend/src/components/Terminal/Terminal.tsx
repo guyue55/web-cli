@@ -16,7 +16,7 @@ interface TerminalProps {
   onSendToChat?: (text: string) => void;
 }
 
-// --- Premium SVG Assets ---
+// --- Premium SVG Assets (Gemini Style) ---
 const IconGemini = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path className="gemini-sparkle-path" d="M12 2L14.85 9.15L22 12L14.85 14.85L12 22L9.15 14.85L2 12L9.15 9.15L12 2Z" fill="url(#gemini_gradient)" />
@@ -140,12 +140,12 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
   };
 
   const QUICK_COMMANDS = [
-    { cmd: '/help', label: '获取全部指令帮助', icon: 'help' },
+    { cmd: '/help', label: '获取指令帮助', icon: 'help' },
     { cmd: '/memory show', label: '查看项目记忆', icon: 'neurology' },
     { cmd: '/skills list', label: '列出代理技能', icon: 'bolt' },
     { cmd: 'git status -sb', label: 'Git 简报', icon: 'account_tree' },
-    { cmd: 'npm run dev', label: '启动开发服', icon: 'terminal' },
-    { cmd: '/reset', label: '强制重置会话', icon: 'refresh' },
+    { cmd: 'npm run dev', label: '启动开发服务器', icon: 'terminal' },
+    { cmd: '/reset', label: '重置当前会话', icon: 'refresh' },
   ];
 
   useEffect(() => {
@@ -155,22 +155,8 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     checkMobile();
     window.addEventListener('resize', checkMobile);
     
-    const observer = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting && xtermRef.current && fitAddonRef.current) {
-        setTimeout(() => {
-          try { 
-            fitAddonRef.current?.fit(); 
-            xtermRef.current?.focus();
-          } catch { /* ignore */ }
-        }, 50);
-      }
-    }, { threshold: 0.1 });
-
-    if (terminalRef.current) observer.observe(terminalRef.current);
-
     return () => {
       window.removeEventListener('resize', checkMobile);
-      observer.disconnect();
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
     };
   }, []);
@@ -283,7 +269,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       }
     }
     if (textToExplain) {
-      onSendToChat(`分析以下输出并在必要时给出修复方案：\n\n\`\`\`\n${stripAnsi(textToExplain)}\n\`\`\``);
+      onSendToChat(`请帮我分析这段终端输出。如果是报错，请解释原因并给出修复建议：\n\n\`\`\`\n${stripAnsi(textToExplain)}\n\`\`\``);
       setContextMenu(null);
       setSelectionPosition(null);
       setErrorPerceived(false);
@@ -299,7 +285,8 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       if (selection && selection.rangeCount > 0) {
         const range = selection.getRangeAt(0);
         const rect = range.getBoundingClientRect();
-        setSelectionPosition({ x: rect.left + rect.width / 2, y: rect.top - 52 });
+        // Pinpoint positioning for selection popup
+        setSelectionPosition({ x: rect.left + rect.width / 2, y: rect.top - 54 });
       }
     } else {
       setSelectionPosition(null);
@@ -330,18 +317,21 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
         const { cols, rows } = xtermRef.current;
         ws.send(JSON.stringify({ type: 'resize', cols, rows }));
       }
+      
+      // Auto-exec logic for initial connection only
       if (initialPrompt && executionLockedRef.current !== `${activeTabId}-${initialPrompt}`) {
         ws.send(JSON.stringify({ type: 'input', data: initialPrompt + '\r' }));
         executionLockedRef.current = `${activeTabId}-${initialPrompt}`;
       } else if (!initialPrompt) {
         ws.send(JSON.stringify({ type: 'input', data: '\x0c' }));
       }
+
       setTimeout(() => {
         if (xtermRef.current) {
           xtermRef.current.focus();
           fitAddonRef.current?.fit();
         }
-      }, 50);
+      }, 100);
     };
 
     ws.onclose = (event) => {
@@ -363,13 +353,17 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
         if (payload.type === 'output' && xtermRef.current) {
           const term = xtermRef.current;
           const data = payload.data;
+          const isAtBottom = term.buffer.active.viewportY >= term.buffer.active.baseY - 1;
           term.write(data);
-          if (data.toLowerCase().includes('error') || data.toLowerCase().includes('failed') || data.includes('exception')) {
+          
+          if (data.toLowerCase().includes('error') || data.toLowerCase().includes('failed')) {
             setErrorPerceived(true);
           }
           if (data.includes('[System Error]') || data.includes('[Critical Error]')) {
             setSystemError(stripAnsi(data).replace(/\[(System|Critical) Error\]/, '').trim());
           }
+          if (isAtBottom) term.scrollToBottom();
+          
           setIsPulseActive(true);
           setTimeout(() => setIsPulseActive(false), 200);
         } else if (payload.type === 'exit') {
@@ -378,6 +372,17 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       } catch { /* ignore */ }
     };
   }, [activeTabId, projectPath, initialPrompt]);
+
+  // Handle subsequent prompt submissions without terminal re-init
+  useEffect(() => {
+    if (initialPrompt && status === 'connected' && wsRef.current?.readyState === WebSocket.OPEN) {
+       const lockKey = `${activeTabId}-${initialPrompt}`;
+       if (executionLockedRef.current !== lockKey) {
+          wsRef.current.send(JSON.stringify({ type: 'input', data: initialPrompt + '\r' }));
+          executionLockedRef.current = lockKey;
+       }
+    }
+  }, [initialPrompt, status, activeTabId]);
 
   useEffect(() => {
     connectRef.current = connect;
@@ -414,7 +419,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
         brightWhite: isDark ? '#ffffff' : '#202124',
       },
       allowProposedApi: true,
-      scrollback: 10000,
+      scrollback: 20000,
       cursorStyle: 'block',
       convertEol: true,
       minimumContrastRatio: 4.5,
@@ -437,10 +442,23 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     xtermRef.current = term;
     fitAddonRef.current = fitAddon;
     
+    // Industrial-grade resize observation
+    const resizeObserver = new ResizeObserver(() => {
+       if (terminalRef.current?.offsetParent) {
+          setTimeout(() => {
+             fitAddon.fit();
+             if (wsRef.current?.readyState === WebSocket.OPEN) {
+                wsRef.current.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+             }
+          }, 60);
+       }
+    });
+    resizeObserver.observe(terminalRef.current);
+
     setTimeout(() => {
       fitAddon.fit();
       connect(term.cols, term.rows);
-    }, 60);
+    }, 100);
 
     term.onData(data => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -477,12 +495,6 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       return true;
     });
 
-    term.onResize(size => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'resize', cols: size.cols, rows: size.rows }));
-      }
-    });
-
     term.onBell(() => {
       setVisualBell(true);
       setTimeout(() => setVisualBell(false), 200);
@@ -493,37 +505,38 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       setHasNewContent(!isBottom);
     });
 
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        setTimeout(() => {
+          try { 
+            fitAddon.fit(); 
+            term.focus();
+          } catch { /* ignore */ }
+        }, 100);
+      }
+    }, { threshold: 0.1 });
+    observer.observe(terminalRef.current);
+
     const termNode = terminalRef.current;
     const handleContainerClick = () => { term.focus(); setContextMenu(null); };
     const handleContextMenu = (e: MouseEvent) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY }); };
     
-    const handleDrop = (e: DragEvent) => {
-      e.preventDefault();
-      const files = e.dataTransfer?.files;
-      if (files && files.length > 0) {
-        sendKey(Array.from(files).map(f => f.name).join(' '));
-      } else {
-        const text = e.dataTransfer?.getData('text/plain');
-        if (text) sendKey(text);
-      }
-    };
-
     termNode.addEventListener('click', handleContainerClick);
     termNode.addEventListener('contextmenu', handleContextMenu);
-    termNode.addEventListener('drop', handleDrop);
     termNode.addEventListener('dragover', (e) => e.preventDefault());
 
     return () => {
+      resizeObserver.disconnect();
+      observer.disconnect();
       termNode.removeEventListener('click', handleContainerClick);
       termNode.removeEventListener('contextmenu', handleContextMenu);
-      termNode.removeEventListener('drop', handleDrop);
       if (wsRef.current) {
         wsRef.current.onclose = null;
         wsRef.current.close();
       }
       term.dispose();
     };
-  }, [activeTabId, projectPath, theme, connect, handlePaste, handleSelectionChange, sendKey, fontSize]);
+  }, [activeTabId, projectPath, theme, connect, handlePaste, handleSelectionChange, fontSize, triggerHaptic]);
 
   const handleDoubleTap = useCallback((e: React.TouchEvent) => {
     const now = Date.now();
