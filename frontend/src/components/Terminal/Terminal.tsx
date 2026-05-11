@@ -810,7 +810,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
 
   return (
     <div 
-      className={`terminal-wrapper ${theme || 'light'} ${isFocusMode ? 'fullscreen-focus' : ''} ${isFocusHighlight ? 'focused' : ''} ${visualBell ? 'visual-bell-active' : ''}`}
+      className={`terminal-wrapper ${theme || 'light'} ${isFocusMode ? 'fullscreen-focus' : ''} ${isFocusHighlight ? 'focused' : ''} ${visualBell ? 'visual-bell-active' : ''} ${(systemError || status === 'disconnected') && !isOverlayDismissed ? 'overlay-active' : ''}`}
       onClick={() => { setContextMenu(null); setIsPaletteOpen(false); setTabContextMenu(null); }}
       onTouchEnd={isMobile ? handleDoubleTap : undefined}
     >
