@@ -2389,8 +2389,8 @@ body, html, #root {
   position: absolute;
   inset: 0;
   background-color: rgba(0, 0, 0, 0.1);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   display: flex;
   align-items: center;
   justify-content: center;

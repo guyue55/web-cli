@@ -464,6 +464,9 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     }
   }, []);
 
+  const initialPromptRef = useRef(initialPrompt);
+  useEffect(() => { initialPromptRef.current = initialPrompt; }, [initialPrompt]);
+
   const connect = useCallback((initialCols?: number, initialRows?: number) => {
     if (wsRef.current) {
       wsRef.current.onclose = null;
@@ -497,11 +500,11 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
         ws.send(JSON.stringify({ type: 'resize', cols, rows }));
       }
       
-      // Auto-exec logic for initial connection only
-      if (initialPrompt && executionLockedRef.current !== `${activeTabId}-${initialPrompt}`) {
-        ws.send(JSON.stringify({ type: 'input', data: initialPrompt + '\r' }));
-        executionLockedRef.current = `${activeTabId}-${initialPrompt}`;
-      } else if (!initialPrompt) {
+      const currentPrompt = initialPromptRef.current;
+      if (currentPrompt && executionLockedRef.current !== `${activeTabId}-${currentPrompt}`) {
+        ws.send(JSON.stringify({ type: 'input', data: currentPrompt + '\r' }));
+        executionLockedRef.current = `${activeTabId}-${currentPrompt}`;
+      } else if (!currentPrompt) {
         ws.send(JSON.stringify({ type: 'input', data: '\x0c' }));
       }
 
@@ -570,7 +573,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
        cancelAnimationFrame(rafId);
        setWsInstance(null);
     });
-  }, [activeTabId, projectPath, initialPrompt]);
+  }, [activeTabId, projectPath]);
 
   const scrollToBottom = () => {
     if (xtermRef.current) {
