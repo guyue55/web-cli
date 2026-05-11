@@ -387,12 +387,13 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     }
   }, [ctrlLatched, altLatched, triggerHaptic]);
 
-  const handleCopy = useCallback(async () => {
+  const handleCopy = useCallback(async (isAuto: boolean | React.MouseEvent = false) => {
     if (xtermRef.current) {
+      const autoFlag = typeof isAuto === 'boolean' ? isAuto : false;
       const content = xtermRef.current.getSelection() || '';
       let textToCopy = content;
       
-      if (!textToCopy) {
+      if (!textToCopy && !autoFlag) {
         xtermRef.current.selectAll();
         textToCopy = xtermRef.current.getSelection();
         xtermRef.current.clearSelection();
@@ -540,6 +541,18 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
 
   const initialPromptRef = useRef(initialPrompt);
   useEffect(() => { initialPromptRef.current = initialPrompt; }, [initialPrompt]);
+
+  const handleCopyRef = useRef(handleCopy);
+  useEffect(() => { handleCopyRef.current = handleCopy; }, [handleCopy]);
+
+  const handlePasteRef = useRef(handlePaste);
+  useEffect(() => { handlePasteRef.current = handlePaste; }, [handlePaste]);
+
+  const handleClearRef = useRef(handleClear);
+  useEffect(() => { handleClearRef.current = handleClear; }, [handleClear]);
+
+  const handleSelectionChangeRef = useRef(handleSelectionChange);
+  useEffect(() => { handleSelectionChangeRef.current = handleSelectionChange; }, [handleSelectionChange]);
 
   const connect = useCallback((initialCols?: number, initialRows?: number) => {
     if (wsRef.current) {
@@ -782,7 +795,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       }
     });
 
-    term.onSelectionChange(() => handleSelectionChange());
+    term.onSelectionChange(() => handleSelectionChangeRef.current());
     const handleFocus = () => setIsFocusHighlight(true);
     const handleBlur = () => setIsFocusHighlight(false);
     const textarea = term.textarea;
@@ -796,15 +809,14 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
         const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
         if ((e.ctrlKey || e.metaKey) && e.key === '=') { setFontSize(f => Math.min(24, f + 1)); return false; }
         if ((e.ctrlKey || e.metaKey) && e.key === '-') { setFontSize(f => Math.max(8, f - 1)); return false; }
-        if (!isMac && e.ctrlKey && e.key === 'v') { handlePaste(); return false; }
+        if (!isMac && e.ctrlKey && e.key === 'v') { handlePasteRef.current(); return false; }
         if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'p')) { 
           if (e.key === 'f') setIsSearchVisible(prev => !prev);
           else setIsPaletteOpen(prev => !prev);
           return false; 
         }
         if ((e.ctrlKey || e.metaKey) && e.key === 'k') { 
-          term.clear(); 
-          if (wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.send(JSON.stringify({ type: 'input', data: '\x0c' }));
+          handleClearRef.current();
           return false; 
         }
       }
@@ -859,8 +871,15 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
        }
     };
 
+    const handleMouseUp = () => {
+      if (term.hasSelection()) {
+        handleCopyRef.current(true);
+      }
+    };
+
     termNode.addEventListener('click', handleContainerClick);
     termNode.addEventListener('contextmenu', handleContextMenu);
+    termNode.addEventListener('mouseup', handleMouseUp);
     termNode.addEventListener('touchstart', handleTouch, { passive: true });
     termNode.addEventListener('touchmove', handleTouch, { passive: true });
     termNode.addEventListener('dragover', (e) => e.preventDefault());
@@ -870,6 +889,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       observer.disconnect();
       termNode.removeEventListener('click', handleContainerClick);
       termNode.removeEventListener('contextmenu', handleContextMenu);
+      termNode.removeEventListener('mouseup', handleMouseUp);
       termNode.removeEventListener('touchstart', handleTouch);
       termNode.removeEventListener('touchmove', handleTouch);
       if (wsRef.current) {
@@ -878,7 +898,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       }
       term.dispose();
     };
-  }, [activeTabId, projectPath, theme, connect, handlePaste, handleSelectionChange, fontSize, triggerHaptic]);
+  }, [activeTabId, projectPath, theme, connect, fontSize]);
 
   const handleDoubleTap = useCallback((e: React.TouchEvent) => {
     const now = Date.now();
