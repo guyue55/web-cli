@@ -153,6 +153,7 @@ function App() {
                    projectPath={selectedSession.projectPath} 
                    initialPrompt={initialPrompt}
                    theme={theme}
+                   onSendToChat={handlePromptSubmit}
                  />
               </div>
             </div>

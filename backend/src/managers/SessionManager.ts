@@ -66,13 +66,13 @@ export class SessionManager {
     }
 
     if (useFallback) {
-      // Non-blocking Python PTY Bridge with dual-way I/O multiplexing and Resize support
+      // Industrial-grade Python PTY Bridge: Binary-safe, Multiplexed, Debounced Resize
       const pyArgs = isNew ? 
         ['--skip-trust', '--approval-mode', 'yolo', '--prompt-interactive', ' '] : 
         ['--resume', uuid, '--skip-trust', '--approval-mode', 'yolo', '--prompt-interactive', ' '];
       
       const pyScript = `
-import pty, os, sys, select, termios, struct, fcntl, signal
+import pty, os, sys, select, termios, struct, fcntl, signal, time
 
 size_file = "/tmp/gemini-term-size-${uuid}.tmp"
 
@@ -83,38 +83,49 @@ def set_size(fd):
                 content = f.read().strip()
                 if content:
                     rows, cols = map(int, content.split(','))
-                    size = struct.pack("HHHH", rows, cols, 0, 0)
-                    fcntl.ioctl(fd, termios.TIOCSWINSZ, size)
-    except Exception: pass
+                    if rows > 0 and cols > 0:
+                        size = struct.pack("HHHH", rows, cols, 0, 0)
+                        fcntl.ioctl(fd, termios.TIOCSWINSZ, size)
+    except: pass
 
 def bridge():
+    import threading
     pid, fd = pty.fork()
     if pid == 0:
         os.execv(r'${geminiPath}', [r'${geminiPath}'] + ${JSON.stringify(pyArgs)})
     else:
-        # Initial size
         with open(size_file, 'w') as f: f.write(f"${rows},${cols}")
         set_size(fd)
-        
-        # Signal handler for SIGUSR1 (triggered by Node)
         def handle_resize(signum, frame):
+            time.sleep(0.01)
             set_size(fd)
         signal.signal(signal.SIGUSR1, handle_resize)
 
-        try:
-            while True:
-                # Use a larger buffer (16KB) for high-speed output
-                r, w, e = select.select([fd, sys.stdin], [], [])
-                if fd in r:
-                    data = os.read(fd, 16384)
+        def pty_to_stdout():
+            try:
+                while True:
+                    data = os.read(fd, 65536)
                     if not data: break
-                    os.write(sys.stdout.fileno(), data)
-                    sys.stdout.flush()
-                if sys.stdin in r:
-                    # Non-blocking read from stdin
-                    data = os.read(sys.stdin.fileno(), 4096)
-                    if data: os.write(fd, data)
-        except (EOFError, OSError): pass
+                    sys.stdout.buffer.write(data)
+                    sys.stdout.buffer.flush()
+            except: pass
+
+        def stdin_to_pty():
+            try:
+                while True:
+                    data = os.read(sys.stdin.fileno(), 16384)
+                    if not data: break
+                    os.write(fd, data)
+            except: pass
+
+        t1 = threading.Thread(target=pty_to_stdout, daemon=True)
+        t2 = threading.Thread(target=stdin_to_pty, daemon=True)
+        t1.start()
+        t2.start()
+        
+        try:
+            while t1.is_alive(): time.sleep(0.5)
+        except: pass
         finally:
             if os.path.exists(size_file): os.remove(size_file)
 
@@ -122,10 +133,10 @@ if __name__ == "__main__":
     bridge()
 `.trim();
       
-      console.log(`[SessionManager] Spawning via Multiplexed Python PTY Bridge...`);
+      console.log(`[SessionManager] Spawning Binary-Safe Python PTY Bridge...`);
       const cp = spawn('/usr/bin/python3', ['-u', '-c', pyScript], {
         cwd: projectPath,
-        env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor', FORCE_COLOR: '1' } as any,
+        env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor', FORCE_COLOR: '1', LANG: 'en_US.UTF-8' } as any,
         stdio: ['pipe', 'pipe', 'pipe']
       });
 

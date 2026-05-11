@@ -39,6 +39,8 @@ export function setupWebSocket(wss: WebSocketServer) {
             session.pty.write(payload.data);
           } else if (payload.type === 'resize') {
             session.pty.resize(payload.cols, payload.rows);
+          } else if (payload.type === 'ping') {
+            ws.send(JSON.stringify({ type: 'pong' }));
           }
         } catch (e) {
           console.error('[WebSocket] Failed to parse message', e);
