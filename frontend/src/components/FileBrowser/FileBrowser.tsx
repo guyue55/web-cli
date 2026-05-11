@@ -17,6 +17,7 @@ const FileBrowser: React.FC = () => {
       setFiles(data);
     } catch { /* ignore */ }
   };
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchFiles();
@@ -27,8 +28,8 @@ const FileBrowser: React.FC = () => {
     if (file.isDirectory) {
       setCurrentPath(file.path);
     } else {
-      // In a real app, we might open a file editor
-      alert(`Opening file: ${file.name}`);
+      // Copy path to clipboard
+      navigator.clipboard.writeText(file.path);
     }
   };
 
@@ -48,11 +49,14 @@ const FileBrowser: React.FC = () => {
       </div>
       <ul className="file-list">
         {files.map(file => (
-          <li key={file.path} onClick={() => handleFileClick(file)}>
+          <li key={file.path} onClick={() => handleFileClick(file)} title={file.isDirectory ? undefined : "点击复制完整路径"}>
             <span className="material-symbols-outlined file-icon" style={{ fontSize: 18, color: file.isDirectory ? 'var(--accent-blue)' : 'var(--text-dim)' }}>
               {file.isDirectory ? 'folder' : 'description'}
             </span>
             <span className="file-name">{file.name}</span>
+            {!file.isDirectory && (
+               <span className="material-symbols-outlined" style={{ fontSize: 14, marginLeft: 'auto', opacity: 0.3 }}>content_copy</span>
+            )}
           </li>
         ))}
       </ul>

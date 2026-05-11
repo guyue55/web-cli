@@ -5,6 +5,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SearchAddon } from '@xterm/addon-search';
+import { ApiService } from '../../services/ApiService';
 import '@xterm/xterm/css/xterm.css';
 
 interface TerminalProps {
@@ -57,6 +58,10 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
   const [isMobile, setIsMobile] = useState(false);
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
+  const [visualBell, setVisualBell] = useState(false);
+  const [ctrlLatched, setCtrlLatched] = useState(false);
+  const [altLatched, setAltLatched] = useState(false);
   
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -78,9 +83,50 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
 
   const sendKey = (key: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'input', data: key }));
+      let finalKey = key;
+      
+      if (ctrlLatched && key.length === 1) {
+        const code = key.toUpperCase().charCodeAt(0) - 64;
+        if (code >= 1 && code <= 26) {
+          finalKey = String.fromCharCode(code);
+        }
+        setCtrlLatched(false);
+      } else if (altLatched && key.length === 1) {
+        finalKey = '\x1b' + key;
+        setAltLatched(false);
+      }
+      
+      wsRef.current.send(JSON.stringify({ type: 'input', data: finalKey }));
     }
   };
+
+  const handleCopy = useCallback(() => {
+    if (xtermRef.current) {
+      const content = xtermRef.current.getSelection() || '';
+      if (content) {
+        navigator.clipboard.writeText(content);
+      } else {
+        xtermRef.current.selectAll();
+        navigator.clipboard.writeText(xtermRef.current.getSelection());
+        xtermRef.current.clearSelection();
+      }
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
+      setContextMenu(null);
+    }
+  }, []);
+
+  const handlePaste = useCallback(async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'input', data: text }));
+      }
+    } catch (err) {
+      console.error('Failed to read clipboard', err);
+    }
+    setContextMenu(null);
+  }, []);
 
   const connect = useCallback((initialCols?: number, initialRows?: number) => {
     if (wsRef.current) {
@@ -178,6 +224,12 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
   useEffect(() => {
     connectRef.current = connect;
   }, [connect]);
+
+  useEffect(() => {
+    if (initialPrompt && wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'input', data: initialPrompt + '\r' }));
+    }
+  }, [initialPrompt]);
   useEffect(() => {
     if (!terminalRef.current) return;
 
@@ -216,6 +268,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       cursorInactiveStyle: 'outline',
       convertEol: true,
       minimumContrastRatio: 4.5,
+      screenReaderMode: true,
     });
     
     const fitAddon = new FitAddon();
@@ -253,15 +306,16 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     const ro = new ResizeObserver(() => {
       clearTimeout(resizeTimeout);
       resizeTimeout = setTimeout(() => {
-        if (xtermRef.current) {
+        if (terminalRef.current && xtermRef.current) {
           try { 
             fitAddon.fit(); 
-            // The onResize callback below will handle sending the WS message
           } catch { /* ignore */ }
         }
-      }, 100);
+      }, 150);
     });
     ro.observe(terminalRef.current);
+
+    connect(term.cols, term.rows);
 
     term.onData(data => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -269,10 +323,36 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       }
     });
 
+    // Custom Keyboard Shortcuts (Convenience)
+    term.attachCustomKeyEventHandler((e) => {
+      // Allow Ctrl+C / Ctrl+V in specific contexts or just let browser handle Cmd
+      if (e.type === 'keydown') {
+        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+        
+        // Handle Paste: Ctrl+V (Win/Linux)
+        if (!isMac && e.ctrlKey && e.key === 'v') {
+          handlePaste();
+          return false;
+        }
+        
+        // Handle Search: Ctrl+F (or Cmd+F)
+        if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+          setIsSearchVisible(prev => !prev);
+          return false;
+        }
+      }
+      return true;
+    });
+
     term.onResize(size => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({ type: 'resize', cols: size.cols, rows: size.rows }));
       }
+    });
+
+    term.onBell(() => {
+      setVisualBell(true);
+      setTimeout(() => setVisualBell(false), 200);
     });
 
     term.onScroll(() => {
@@ -283,15 +363,39 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     // Handle clicks to focus
     const handleContainerClick = () => {
       term.focus();
+      setContextMenu(null);
+    };
+
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      setContextMenu({ x: e.clientX, y: e.clientY });
+    };
+
+    const handleDrop = (e: DragEvent) => {
+      e.preventDefault();
+      const text = e.dataTransfer?.getData('text/plain');
+      if (text) {
+        sendKey(text);
+      }
+    };
+
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault();
     };
     
     const termNode = terminalRef.current;
     termNode.addEventListener('click', handleContainerClick);
+    termNode.addEventListener('contextmenu', handleContextMenu);
+    termNode.addEventListener('drop', handleDrop);
+    termNode.addEventListener('dragover', handleDragOver);
 
     return () => {
       ro.disconnect();
       if (termNode) {
         termNode.removeEventListener('click', handleContainerClick);
+        termNode.removeEventListener('contextmenu', handleContextMenu);
+        termNode.removeEventListener('drop', handleDrop);
+        termNode.removeEventListener('dragover', handleDragOver);
       }
       if (wsRef.current) {
         wsRef.current.onclose = null;
@@ -301,18 +405,14 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     };
   }, [uuid, projectPath, theme, connect]);
 
-  const handleCopy = () => {
-    if (xtermRef.current) {
-      const content = xtermRef.current.getSelection() || '';
-      if (content) {
-        navigator.clipboard.writeText(content);
-      } else {
-        xtermRef.current.selectAll();
-        navigator.clipboard.writeText(xtermRef.current.getSelection());
-        xtermRef.current.clearSelection();
-      }
-      setIsCopied(true);
-      setTimeout(() => setIsCopied(false), 2000);
+  const handleForceRestart = async () => {
+    try {
+      setStatus('connecting');
+      await ApiService.restartSession(uuid, projectPath);
+      connect(xtermRef.current?.cols, xtermRef.current?.rows);
+    } catch (e) {
+      console.error('Failed to force restart', e);
+      connect();
     }
   };
 
@@ -346,7 +446,10 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
   };
 
   return (
-    <div className={`terminal-wrapper ${theme || 'light'} ${isFocusMode ? 'fullscreen-focus' : ''}`}>
+    <div 
+      className={`terminal-wrapper ${theme || 'light'} ${isFocusMode ? 'fullscreen-focus' : ''} ${visualBell ? 'visual-bell-active' : ''}`}
+      onClick={() => setContextMenu(null)}
+    >
       <div className="terminal-toolbar premium-header">
         <div className="terminal-title">
            <div className={`gemini-logo-container ${isPulseActive ? 'pulsing' : ''}`}>
@@ -415,7 +518,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
                onClick={() => setIsFocusMode(!isFocusMode)}>
                {isFocusMode ? <IconShrink /> : <IconExpand />}
              </button>
-             <button className="terminal-btn-official-accent" title="重新启动" onClick={() => connect()}>
+             <button className="terminal-btn-official-accent" title="重新启动" onClick={() => handleForceRestart()}>
                <IconRefresh />
              </button>
            </div>
@@ -425,16 +528,45 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       <div className="terminal-inner">
         <div ref={terminalRef} className="xterm-container-gemini" />
         
+        {contextMenu && (
+          <div 
+            className="terminal-context-menu glass-effect"
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="menu-item" onClick={handleCopy}>
+              <span className="material-symbols-outlined">content_copy</span>
+              复制 (Copy)
+            </div>
+            <div className="menu-item" onClick={handlePaste}>
+              <span className="material-symbols-outlined">content_paste</span>
+              粘贴 (Paste)
+            </div>
+            <div className="menu-divider" />
+            <div className="menu-item" onClick={() => { xtermRef.current?.reset(); setContextMenu(null); }}>
+              <span className="material-symbols-outlined">rebase_edit</span>
+              清除屏幕 (Clear)
+            </div>
+          </div>
+        )}
+
         {isMobile && status === 'connected' && (
           <div className="mobile-terminal-helper glass-effect">
-            <button className="helper-btn" onClick={() => sendKey('\x1b')}>ESC</button>
-            <button className="helper-btn" onClick={() => sendKey('\t')}>TAB</button>
-            <button className="helper-btn" onClick={() => sendKey('\x03')}>^C</button>
-            <div className="helper-divider" />
-            <button className="helper-btn" onClick={() => sendKey('\x1b[A')}>↑</button>
-            <button className="helper-btn" onClick={() => sendKey('\x1b[B')}>↓</button>
-            <button className="helper-btn" onClick={() => sendKey('\x1b[D')}>←</button>
-            <button className="helper-btn" onClick={() => sendKey('\x1b[C')}>→</button>
+            <div className="helper-row">
+              <button className={`helper-btn latchable ${ctrlLatched ? 'latched' : ''}`} onClick={() => setCtrlLatched(!ctrlLatched)}>CTRL</button>
+              <button className={`helper-btn latchable ${altLatched ? 'latched' : ''}`} onClick={() => setAltLatched(!altLatched)}>ALT</button>
+              <button className="helper-btn" onClick={() => sendKey('\x1b')}>ESC</button>
+              <button className="helper-btn" onClick={() => sendKey('\t')}>TAB</button>
+              <button className="helper-btn" onClick={() => sendKey('\x03')}>^C</button>
+            </div>
+            <div className="helper-row">
+              <button className="helper-btn" onClick={() => sendKey('\x1b\x1b[5~')}>PgUp</button>
+              <button className="helper-btn" onClick={() => sendKey('\x1b\x1b[6~')}>PgDn</button>
+              <button className="helper-btn" onClick={() => sendKey('\x1b[A')}>↑</button>
+              <button className="helper-btn" onClick={() => sendKey('\x1b[B')}>↓</button>
+              <button className="helper-btn" onClick={() => sendKey('\x1b[D')}>←</button>
+              <button className="helper-btn" onClick={() => sendKey('\x1b[C')}>→</button>
+            </div>
           </div>
         )}
 

@@ -58,4 +58,16 @@ export class SessionController {
       res.status(500).json({ error: (e as Error).message });
     }
   }
+
+  static forceRestartSession(req: Request, res: Response) {
+    const { uuid } = req.params;
+    const projectPath = req.query.projectPath as string;
+    if (!uuid || !projectPath) {
+      res.status(400).json({ error: 'uuid and projectPath are required' });
+      return;
+    }
+    const sessionKey = SessionManager.getSessionKey(projectPath, uuid as string);
+    SessionManager.forceKillSession(sessionKey);
+    res.json({ message: 'Session killed, please reconnect' });
+  }
 }

@@ -10,17 +10,21 @@ import './App.css';
 
 function App() {
   const { activeSessions, projects, groupedHistory, isDiscovering } = useSessions();
-  const [selectedSession, setSelectedSession] = useState<HistoryItem | null>(null);
+  const [selectedSession, setSelectedSession] = useState<HistoryItem | null>(() => {
+    const saved = localStorage.getItem('last_session_v2');
+    return saved ? JSON.parse(saved) : null;
+  });
   const { transcript, isLoading: isLoadingTranscript, hasMore, loadMore } = useTranscript(selectedSession);
   const { theme, toggleTheme } = useTheme();
   
-  const [isLiveMode, setIsLiveMode] = useState(false);
+  const [isLiveMode, setIsLiveMode] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [initialPrompt, setInitialPrompt] = useState<string | null>(null);
 
   const handleSelectSession = (session: HistoryItem) => {
     setSelectedSession(session);
+    localStorage.setItem('last_session_v2', JSON.stringify(session));
     setIsLiveMode(false);
     setInitialPrompt(null);
     if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
@@ -28,6 +32,7 @@ function App() {
 
   const handleNewChat = () => {
     setSelectedSession(null);
+    localStorage.removeItem('last_session_v2');
     setIsLiveMode(false);
     setInitialPrompt(null);
   };
@@ -47,11 +52,13 @@ function App() {
         updatedAt: Date.now()
       };
       setSelectedSession(newSession);
+      localStorage.setItem('last_session_v2', JSON.stringify(newSession));
       setInitialPrompt(text);
     } else {
+      // Force terminal mode and send prompt
       setInitialPrompt(text);
+      if (!isLiveMode) setIsLiveMode(true);
     }
-    setIsLiveMode(true);
   };
 
   return (

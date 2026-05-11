@@ -32,6 +32,12 @@ export class ApiService {
     return res.json();
   }
 
+  static async restartSession(uuid: string, projectPath: string): Promise<void> {
+    const url = `${BASE_URL}/history/${uuid}/restart?projectPath=${encodeURIComponent(projectPath)}`;
+    const res = await fetch(url, { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to restart session');
+  }
+
   static connectDiscovery(onMessage: (msg: DiscoveryMessage) => void): () => void {
     const ws = new WebSocket(`${WS_URL}/discovery`);
     ws.onmessage = (event) => {

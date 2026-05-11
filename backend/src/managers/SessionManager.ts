@@ -189,6 +189,18 @@ if __name__ == "__main__":
     return session;
   }
 
+  static forceKillSession(sessionKey: string) {
+    const session = this.sessions.get(sessionKey);
+    if (session) {
+      console.log(`[SessionManager] Force killing session: ${sessionKey}`);
+      if (session.pty && (session.pty as any).kill) {
+        (session.pty as any).kill();
+      }
+      session.clients.forEach(c => c.close(1000, 'Session force restarted'));
+      this.sessions.delete(sessionKey);
+    }
+  }
+
   static getActiveSessions(): string[] {
     return Array.from(this.sessions.keys());
   }
