@@ -78,6 +78,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
   const [searchQuery, setSearchQuery] = useState('');
   const [searchMatches, setSearchMatches] = useState({ current: 0, total: 0 });
   const [isSearchVisible, setIsSearchVisible] = useState(false);
+  const [isFocusHighlight, setIsFocusHighlight] = useState(false);
   
   const [commandHistory, setHistory] = useState<string[]>(() => {
     const saved = localStorage.getItem('terminal_cmd_history');
@@ -466,17 +467,36 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     xtermRef.current = term;
     fitAddonRef.current = fitAddon;
     
-    // Industrial-grade resize observation
+    // Industrial-grade resize observation with stability threshold
     let resizeTimeout: ReturnType<typeof setTimeout>;
-    const resizeObserver = new ResizeObserver(() => {
-       if (terminalRef.current?.offsetParent) {
-          clearTimeout(resizeTimeout);
-          resizeTimeout = setTimeout(() => {
-             fitAddon.fit();
-             if (wsRef.current?.readyState === WebSocket.OPEN) {
-                wsRef.current.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
-             }
-          }, 150); // Increased delay for mobile keyboard animations
+    let lastWidth = 0;
+    let lastHeight = 0;
+    
+    const resizeObserver = new ResizeObserver((entries) => {
+       const entry = entries[0];
+       if (!entry) return;
+       
+       const { width, height } = entry.contentRect;
+       // Only trigger if change is significant (> 4px) to ignore focus-glow/border jitters
+       if (Math.abs(width - lastWidth) > 4 || Math.abs(height - lastHeight) > 4) {
+          lastWidth = width;
+          lastHeight = height;
+          
+          if (terminalRef.current?.offsetParent) {
+             clearTimeout(resizeTimeout);
+             resizeTimeout = setTimeout(() => {
+                if (fitAddonRef.current && xtermRef.current) {
+                   fitAddonRef.current.fit();
+                   if (wsRef.current?.readyState === WebSocket.OPEN) {
+                      wsRef.current.send(JSON.stringify({ 
+                         type: 'resize', 
+                         cols: xtermRef.current.cols, 
+                         rows: xtermRef.current.rows 
+                      }));
+                   }
+                }
+             }, 300); // Stable debounce
+          }
        }
     });
     resizeObserver.observe(terminalRef.current);
@@ -493,8 +513,8 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     });
 
     term.onSelectionChange(() => handleSelectionChange());
-    const handleFocus = () => setIsFocusMode(true);
-    const handleBlur = () => setIsFocusMode(false);
+    const handleFocus = () => setIsFocusHighlight(true);
+    const handleBlur = () => setIsFocusHighlight(false);
     const textarea = term.textarea;
     if (textarea) {
       textarea.addEventListener('focus', handleFocus);
@@ -609,7 +629,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
 
   return (
     <div 
-      className={`terminal-wrapper ${theme || 'light'} ${isFocusMode ? 'fullscreen-focus focused' : ''} ${visualBell ? 'visual-bell-active' : ''}`}
+      className={`terminal-wrapper ${theme || 'light'} ${isFocusMode ? 'fullscreen-focus' : ''} ${isFocusHighlight ? 'focused' : ''} ${visualBell ? 'visual-bell-active' : ''}`}
       onClick={() => { setContextMenu(null); setIsPaletteOpen(false); setTabContextMenu(null); }}
       onTouchEnd={isMobile ? handleDoubleTap : undefined}
     >

@@ -578,7 +578,7 @@ body, html, #root {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.3s ease; /* Specific transition to avoid layout jitter */
   position: relative;
   opacity: 1;
 }
@@ -611,6 +611,8 @@ body, html, #root {
   flex-direction: column;
   height: 100%;
   width: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .terminal-view-layer {
@@ -1207,8 +1209,9 @@ body, html, #root {
   align-items: center;
   gap: 10px;
   border: 1px solid transparent;
+  border-top: 2px solid transparent; /* Rigid height to prevent layout jitter */
   border-bottom: none;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 0.2s, color 0.2s, border-color 0.2s;
   min-width: 120px;
   position: relative;
 }
@@ -1301,7 +1304,7 @@ body, html, #root {
 }
 
 .terminal-wrapper {
-  flex: 1;
+  flex: 1 1 0%;
   display: flex;
   flex-direction: column;
   background-color: #131314;
@@ -1309,9 +1312,31 @@ body, html, #root {
   overflow: hidden;
   border: 1px solid var(--border-subtle);
   box-shadow: var(--shadow-float);
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), 
+              opacity 0.4s ease, 
+              border-color 0.2s ease, 
+              box-shadow 0.2s ease;
   position: relative;
   z-index: 10;
+  /* Lock layout and size to prevent any interaction-driven jumping */
+  contain: size layout;
+}
+
+.terminal-inner {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  touch-action: pan-y pinch-zoom;
+  /* Completely isolate terminal from affecting page layout */
+  contain: strict;
+}
+
+/* Fix iOS Auto-zoom on terminal input */
+.xterm-helper-textarea {
+  font-size: 16px !important;
 }
 
 /* Fullscreen/Focus Mode */
@@ -1654,26 +1679,7 @@ body, html, #root {
   text-align: center;
 }
 
-.terminal-inner {
-  flex: 1;
-  position: relative;
-  overflow: hidden;
-  background: transparent;
-  display: flex;
-  flex-direction: column;
-  touch-action: pan-y pinch-zoom;
-}
-
-/* Premium Gemini Glow Cursor */
-.xterm-cursor {
-  box-shadow: 0 0 10px 2px rgba(66, 133, 244, 0.4);
-  animation: cursor-breath 1.5s infinite alternate ease-in-out;
-}
-
-@keyframes cursor-breath {
-  from { filter: brightness(1); opacity: 0.8; }
-  to { filter: brightness(1.3); opacity: 1; box-shadow: 0 0 15px 4px rgba(155, 114, 203, 0.6); }
-}
+/* Terminal Layout Isolated */
 
 .scroll-bottom-fab {
   position: absolute;
@@ -1988,26 +1994,7 @@ body, html, #root {
   color: var(--text-dim);
 }
 
-.terminal-inner {
-  flex: 1;
-  position: relative;
-  overflow: hidden;
-  background: transparent;
-  display: flex;
-  flex-direction: column;
-  touch-action: pan-y pinch-zoom;
-}
-
-/* Premium Gemini Glow Cursor */
-.xterm-cursor {
-  box-shadow: 0 0 10px 2px rgba(66, 133, 244, 0.4);
-  animation: cursor-breath 1.5s infinite alternate ease-in-out;
-}
-
-@keyframes cursor-breath {
-  from { filter: brightness(1); opacity: 0.8; }
-  to { filter: brightness(1.3); opacity: 1; box-shadow: 0 0 15px 4px rgba(155, 114, 203, 0.6); }
-}
+/* Terminal Layout Isolated */
 
 .scroll-bottom-fab {
   position: absolute;
