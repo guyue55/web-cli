@@ -806,10 +806,8 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
 
     term.attachCustomKeyEventHandler((e) => {
       if (e.type === 'keydown') {
-        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
         if ((e.ctrlKey || e.metaKey) && e.key === '=') { setFontSize(f => Math.min(24, f + 1)); return false; }
         if ((e.ctrlKey || e.metaKey) && e.key === '-') { setFontSize(f => Math.max(8, f - 1)); return false; }
-        if (!isMac && e.ctrlKey && e.key === 'v') { handlePasteRef.current(); return false; }
         if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'p')) { 
           if (e.key === 'f') setIsSearchVisible(prev => !prev);
           else setIsPaletteOpen(prev => !prev);
