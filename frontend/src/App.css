@@ -2730,6 +2730,45 @@ body, html, #root {
   to { transform: translateY(0) scale(1); opacity: 1; }
 }
 
+/* Copy Toast - Gemini Style */
+.gemini-copy-toast {
+  position: fixed;
+  bottom: 32px;
+  right: 32px;
+  background: rgba(30, 31, 32, 0.9);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: white;
+  padding: 10px 20px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 9999;
+  animation: toastEntrance 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.gemini-copy-toast .material-symbols-outlined {
+  font-size: 18px;
+  color: #8ab4f8;
+}
+
+[data-theme='light'] .gemini-copy-toast {
+  background: rgba(255, 255, 255, 0.95);
+  color: #1f1f1f;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+@keyframes toastEntrance {
+  from { transform: translateY(20px) scale(0.9); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
