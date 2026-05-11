@@ -81,7 +81,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     };
   }, []);
 
-  const sendKey = (key: string) => {
+  const sendKey = useCallback((key: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       let finalKey = key;
       
@@ -98,7 +98,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       
       wsRef.current.send(JSON.stringify({ type: 'input', data: finalKey }));
     }
-  };
+  }, [ctrlLatched, altLatched]);
 
   const handleCopy = useCallback(() => {
     if (xtermRef.current) {
@@ -403,7 +403,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       }
       term.dispose();
     };
-  }, [uuid, projectPath, theme, connect]);
+  }, [uuid, projectPath, theme, connect, handlePaste, sendKey]);
 
   const handleForceRestart = async () => {
     try {
