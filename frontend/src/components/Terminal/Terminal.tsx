@@ -103,8 +103,7 @@ const TerminalStatusBar = React.memo(({ ws, status }: { ws: WebSocket | null, st
 
 const TerminalHeader = React.memo(({ 
   status, 
-  errorPerceived, 
-  isPulseActive, 
+  ws,
   isPaletteOpen, 
   isSearchVisible, 
   isFocusMode, 
@@ -123,8 +122,7 @@ const TerminalHeader = React.memo(({
   onSearch
 }: {
   status: string,
-  errorPerceived: boolean,
-  isPulseActive: boolean,
+  ws: WebSocket | null,
   isPaletteOpen: boolean,
   isSearchVisible: boolean,
   isFocusMode: boolean,
@@ -132,7 +130,7 @@ const TerminalHeader = React.memo(({
   isMobile: boolean,
   searchQuery: string,
   searchMatches: { current: number, total: number },
-  onExplain: () => void,
+  onExplain: (customText?: string) => void,
   onTogglePalette: () => void,
   onToggleSearch: () => void,
   onToggleFocus: () => void,
@@ -142,6 +140,29 @@ const TerminalHeader = React.memo(({
   onClear: () => void,
   onSearch: (q: string, dir?: 'next' | 'prev') => void
 }) => {
+  const [isPulseActive, setIsPulseActive] = useState(false);
+  const [errorPerceived, setErrorPerceived] = useState(false);
+
+  useEffect(() => {
+    if (!ws) return;
+    const onMessage = (event: MessageEvent) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.type === 'output') {
+          const data = payload.data.toLowerCase();
+          if (data.includes('error') || data.includes('failed') || data.includes('exception')) {
+            setErrorPerceived(true);
+          }
+          setIsPulseActive(true);
+          const t = setTimeout(() => setIsPulseActive(false), 200);
+          return () => clearTimeout(t);
+        }
+      } catch { /* ignore */ }
+    };
+    ws.addEventListener('message', onMessage);
+    return () => ws.removeEventListener('message', onMessage);
+  }, [ws]);
+
   return (
     <div className="terminal-toolbar premium-header">
       <div className="terminal-title">
@@ -162,7 +183,7 @@ const TerminalHeader = React.memo(({
            <button 
              className={`terminal-btn-gemini ai-highlight ${errorPerceived ? 'error-perceived' : ''}`} 
              title={errorPerceived ? "检测到错误，交给 AI 解释" : "AI 解释当前内容"} 
-             onClick={(e) => { e.stopPropagation(); onExplain(); }}
+             onClick={(e) => { e.stopPropagation(); onExplain(); setErrorPerceived(false); }}
            >
              <span className="material-symbols-outlined">auto_awesome</span>
            </button>
@@ -231,7 +252,6 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
   const [isCopied, setIsCopied] = useState(false);
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [hasNewContent, setHasNewContent] = useState(false);
-  const [isPulseActive, setIsPulseActive] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
   const [visualBell, setVisualBell] = useState(false);
@@ -241,7 +261,6 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
   const [isHelperVisible, setIsHelperVisible] = useState(true);
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [fontSize, setFontSize] = useState(14);
-  const [errorPerceived, setErrorPerceived] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchMatches, setSearchMatches] = useState({ current: 0, total: 0 });
   const [isSearchVisible, setIsSearchVisible] = useState(false);
@@ -419,7 +438,6 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       onSendToChat(`请帮我分析这段终端输出。如果是报错，请解释原因并给出修复建议：\n\n\`\`\`\n${stripAnsi(textToExplain)}\n\`\`\``);
       setContextMenu(null);
       setSelectionPosition(null);
-      setErrorPerceived(false);
       triggerHaptic();
     }
   }, [onSendToChat, triggerHaptic]);
@@ -456,8 +474,15 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     setSystemError(null);
 
     const host = window.location.hostname || 'localhost';
+    const isDefaultPort =
+      window.location.port === '' ||
+      window.location.port === '80' ||
+      window.location.port === '443';
     const dimensions = initialCols ? `&cols=${initialCols}&rows=${initialRows}` : '';
-    const wsUrl = `ws://${host}:3001?uuid=${activeTabId}&projectPath=${encodeURIComponent(projectPath)}${dimensions}`;
+    const wsBase = isDefaultPort
+      ? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${host}/ws`
+      : `ws://${host}:3001`;
+    const wsUrl = `${wsBase}?uuid=${activeTabId}&projectPath=${encodeURIComponent(projectPath)}${dimensions}`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
     setWsInstance(ws);
@@ -513,8 +538,6 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
         writeBuffer.length = 0;
         
         if (isAtBottom) term.scrollToBottom();
-        setIsPulseActive(true);
-        setTimeout(() => setIsPulseActive(false), 200);
 
         // Yield to maintain high INP (2026 standard)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -534,9 +557,6 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
           const data = payload.data;
           writeBuffer.push(data);
           
-          if (data.toLowerCase().includes('error') || data.toLowerCase().includes('failed')) {
-            setErrorPerceived(true);
-          }
           if (data.includes('[System Error]') || data.includes('[Critical Error]')) {
             setSystemError(stripAnsi(data).replace(/\[(System|Critical) Error\]/, '').trim());
           }
@@ -826,8 +846,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
 
       <TerminalHeader 
         status={status}
-        errorPerceived={errorPerceived}
-        isPulseActive={isPulseActive}
+        ws={wsInstance}
         isPaletteOpen={isPaletteOpen}
         isSearchVisible={isSearchVisible}
         isFocusMode={isFocusMode}
@@ -835,7 +854,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
         isMobile={isMobile}
         searchQuery={searchQuery}
         searchMatches={searchMatches}
-        onExplain={() => explainWithGemini()}
+        onExplain={(text) => explainWithGemini(text)}
         onTogglePalette={() => setIsPaletteOpen(!isPaletteOpen)}
         onToggleSearch={() => setIsSearchVisible(!isSearchVisible)}
         onToggleFocus={() => setIsFocusMode(!isFocusMode)}

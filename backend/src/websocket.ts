@@ -9,7 +9,7 @@ export function setupWebSocket(wss: WebSocketServer) {
     const pathname = url.pathname;
 
     // Route 1: Discovery (Streaming scan)
-    if (pathname === '/discovery') {
+    if (pathname === '/discovery' || pathname === '/ws/discovery') {
       console.log('[WebSocket] New discovery connection');
       GeminiDiscovery.discoverAndStream(ws);
       return;

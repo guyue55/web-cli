@@ -91,9 +91,18 @@ def set_size(fd):
     except: pass
 
 def bridge():
-    pid, fd = pty.fork()
+    try:
+        pid, fd = pty.fork()
+    except Exception as e:
+        sys.stderr.write(f"Fork failed: {e}\\n")
+        return
+
     if pid == 0:
-        os.execv(r'${geminiPath}', [r'${geminiPath}'] + ${JSON.stringify(pyArgs)})
+        try:
+            os.execv(r'${geminiPath}', [r'${geminiPath}'] + ${JSON.stringify(pyArgs)})
+        except Exception as e:
+            sys.stderr.write(f"Exec failed: {e}\\n")
+            os._exit(1)
     else:
         with open(size_file, 'w') as f: f.write(f"${rows},${cols}")
         set_size(fd)
@@ -109,7 +118,8 @@ def bridge():
                     if not data: break
                     sys.stdout.buffer.write(data)
                     sys.stdout.buffer.flush()
-            except: pass
+            except Exception as e:
+                sys.stderr.write(f"PTY read error: {e}\\n")
 
         def stdin_to_pty():
             try:
@@ -117,14 +127,15 @@ def bridge():
                     data = os.read(sys.stdin.fileno(), 16384)
                     if not data: break
                     os.write(fd, data)
-            except: pass
+            except Exception as e:
+                sys.stderr.write(f"Stdin read error: {e}\\n")
 
         t1 = threading.Thread(target=pty_to_stdout, daemon=True)
         t2 = threading.Thread(target=stdin_to_pty, daemon=True)
         t1.start()
         t2.start()
         try:
-            while t1.is_alive(): time.sleep(0.5)
+            while t1.is_alive(): time.sleep(0.1)
         except: pass
         finally:
             if os.path.exists(size_file): os.remove(size_file)
@@ -138,6 +149,11 @@ if __name__ == "__main__":
         cwd: projectPath,
         env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor', FORCE_COLOR: '1', LANG: 'en_US.UTF-8' } as any,
         stdio: ['pipe', 'pipe', 'pipe']
+      });
+
+      // Handle stdin error to prevent fatal EPIPE crash
+      cp.stdin?.on('error', (err) => {
+        console.warn(`[SessionManager] Bridge stdin error: ${err.message}`);
       });
 
       const decoder = new StringDecoder('utf8');
@@ -165,7 +181,13 @@ if __name__ == "__main__":
 
       ptyProcess = {
         write: (data: string) => {
-          if (cp.stdin?.writable) cp.stdin.write(data);
+          try {
+            if (cp.stdin?.writable) {
+              cp.stdin.write(data);
+            }
+          } catch (e) {
+            console.warn(`[SessionManager] Failed to write to PTY: ${e}`);
+          }
         },
         kill: () => {
           cp.kill();

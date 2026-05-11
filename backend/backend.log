@@ -1,0 +1,7 @@
+
+Global Gemini Session Manager listening on http://0.0.0.0:3001
+[GeminiService] Peeking FS for session cache update...
+[GeminiService] Cache updated: 36 sessions.
+[SessionManager] Resuming Gemini session at /Users/guyue/GitProject/SoulBook (50x31)
+[SessionManager] node-pty failed: Error: posix_spawnp failed.. Falling back to child_process.spawn.
+[SessionManager] Spawning Threaded Binary-Safe Python Bridge...

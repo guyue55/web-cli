@@ -12,6 +12,7 @@ app.use(express.json());
 
 // API Routes
 app.use('/', apiRouter);
+app.use('/api', apiRouter);
 
 const server = createServer(app);
 const wss = new WebSocketServer({ server });

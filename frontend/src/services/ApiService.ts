@@ -1,8 +1,22 @@
 import type { ChatMessage, DiscoveryMessage } from '@web-cli/shared';
 
 const HOST = window.location.hostname || 'localhost';
-const BASE_URL = `http://${HOST}:3001`;
-const WS_URL = `ws://${HOST}:3001`;
+const IS_DEFAULT_PORT =
+  window.location.port === '' ||
+  window.location.port === '80' ||
+  window.location.port === '443';
+
+const DEFAULT_API_BASE = IS_DEFAULT_PORT
+  ? `${window.location.origin}/api`
+  : `http://${HOST}:3001`;
+
+const DEFAULT_WS_BASE = IS_DEFAULT_PORT
+  ? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${HOST}/ws`
+  : `ws://${HOST}:3001`;
+
+const ENV = import.meta.env as Record<string, string | undefined>;
+const BASE_URL = ENV.VITE_API_BASE ?? DEFAULT_API_BASE;
+const WS_URL = ENV.VITE_WS_BASE ?? DEFAULT_WS_BASE;
 
 export class ApiService {
   static async getActiveSessions(): Promise<string[]> {
