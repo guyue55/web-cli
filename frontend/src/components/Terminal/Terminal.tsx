@@ -504,8 +504,6 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       if (currentPrompt && executionLockedRef.current !== `${activeTabId}-${currentPrompt}`) {
         ws.send(JSON.stringify({ type: 'input', data: currentPrompt + '\r' }));
         executionLockedRef.current = `${activeTabId}-${currentPrompt}`;
-      } else if (!currentPrompt) {
-        ws.send(JSON.stringify({ type: 'input', data: '\x0c' }));
       }
 
       setTimeout(() => {
