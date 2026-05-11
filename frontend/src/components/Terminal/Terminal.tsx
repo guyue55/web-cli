@@ -280,11 +280,9 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
   const [tabContextMenu, setTabContextMenu] = useState<{ x: number, y: number, id: string } | null>(null);
 
   const lastTapRef = useRef<number>(0);
-  const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const executionLockedRef = useRef<string | null>(null);
   const connectRef = useRef<(cols?: number, rows?: number) => void>(() => {});
-  const maxReconnectAttempts = 5;
 
   const triggerHaptic = useCallback(() => {
     if (isMobile && window.navigator.vibrate) {
@@ -344,7 +342,9 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     
     return () => {
       window.removeEventListener('resize', checkMobile);
-      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      const currentTimer = reconnectTimerRef.current;
+      if (currentTimer) clearTimeout(currentTimer);
     };
   }, []);
 
@@ -489,7 +489,6 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
 
     ws.onopen = () => {
       setStatus('connected');
-      reconnectAttemptsRef.current = 0;
       if (!initialCols && xtermRef.current) {
         fitAddonRef.current?.fit();
         const { cols, rows } = xtermRef.current;
@@ -514,16 +513,15 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
 
     ws.onclose = (event) => {
       setStatus('disconnected');
-      if (event.code !== 1000 && reconnectAttemptsRef.current < maxReconnectAttempts) {
-        const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 10000);
-        reconnectTimerRef.current = setTimeout(() => {
-          reconnectAttemptsRef.current += 1;
-          connectRef.current(initialCols, initialRows);
-        }, delay);
+      if (event.code !== 1000) {
+        setSystemError(`连接意外断开 (代码: ${event.code})。请检查后端服务状态或尝试重新连接。`);
       }
     };
 
-    ws.onerror = () => setStatus('disconnected');
+    ws.onerror = () => {
+      setStatus('disconnected');
+      setSystemError('无法建立 WebSocket 连接。执行环境可能已关闭或网络受限。');
+    };
 
     const writeBuffer: string[] = [];
     let rafId: number;
@@ -1006,10 +1004,11 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
         {systemError && (
            <div className="terminal-overlay-modern">
               <div className="overlay-card-gemini glass-effect error-border">
+                 <button className="overlay-close-btn" onClick={() => setSystemError(null)}>×</button>
                  <div className="gemini-error-icon-container"><IconInterrupt /></div>
-                 <h3>执行环境报错</h3>
+                 <h3>执行环境异常</h3>
                  <p className="error-msg-detail">{systemError}</p>
-                 <button className="btn-gemini-glow error-bg" onClick={() => connect()}><IconRefresh /> 重试连接</button>
+                 <button className="btn-gemini-glow error-bg" onClick={() => connect()}><IconRefresh /> 重新连接</button>
               </div>
            </div>
         )}
