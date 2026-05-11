@@ -265,6 +265,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
   const [searchMatches, setSearchMatches] = useState({ current: 0, total: 0 });
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [isFocusHighlight, setIsFocusHighlight] = useState(false);
+  const [isOverlayDismissed, setIsOverlayDismissed] = useState(false);
   
   const [commandHistory, setHistory] = useState<string[]>(() => {
     const saved = localStorage.getItem('terminal_cmd_history');
@@ -471,6 +472,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
 
     setStatus('connecting');
+    setIsOverlayDismissed(false);
     setSystemError(null);
 
     const host = window.location.hostname || 'localhost';
@@ -990,9 +992,10 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
            </div>
         )}
 
-        {status === 'disconnected' && !systemError && (
+        {status === 'disconnected' && !systemError && !isOverlayDismissed && (
            <div className="terminal-overlay-modern">
               <div className="overlay-card-gemini glass-effect">
+                 <button className="overlay-close-btn" onClick={() => setIsOverlayDismissed(true)}>×</button>
                  <div className="gemini-sparkle-container"><IconGemini /></div>
                  <h3>会话已就绪</h3>
                  <p>执行环境已准备就绪。由于安全策略，请点击下方按钮激活交互式终端会话。</p>
@@ -1001,10 +1004,10 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
            </div>
         )}
 
-        {systemError && (
+        {systemError && !isOverlayDismissed && (
            <div className="terminal-overlay-modern">
               <div className="overlay-card-gemini glass-effect error-border">
-                 <button className="overlay-close-btn" onClick={() => setSystemError(null)}>×</button>
+                 <button className="overlay-close-btn" onClick={() => setIsOverlayDismissed(true)}>×</button>
                  <div className="gemini-error-icon-container"><IconInterrupt /></div>
                  <h3>执行环境异常</h3>
                  <p className="error-msg-detail">{systemError}</p>
