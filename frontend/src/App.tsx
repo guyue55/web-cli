@@ -22,19 +22,47 @@ function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [initialPrompt, setInitialPrompt] = useState<string | null>(null);
 
+  const toggleLiveMode = (mode: boolean) => {
+    // View Transitions API (2026 standard)
+    if (document.startViewTransition) {
+       // View Transitions API (2026 standard)
+       document.startViewTransition(() => setIsLiveMode(mode));
+    } else {
+       setIsLiveMode(mode);
+    }
+  };
+
   const handleSelectSession = (session: HistoryItem) => {
-    setSelectedSession(session);
-    localStorage.setItem('last_session_v2', JSON.stringify(session));
-    setIsLiveMode(false);
-    setInitialPrompt(null);
+    const update = () => {
+      setSelectedSession(session);
+      localStorage.setItem('last_session_v2', JSON.stringify(session));
+      setIsLiveMode(false);
+      setInitialPrompt(null);
+    };
+    // View Transitions API (2026 standard)
+    if (document.startViewTransition) {
+       // View Transitions API (2026 standard)
+       document.startViewTransition(update);
+    } else {
+       update();
+    }
     if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
   };
 
   const handleNewChat = () => {
-    setSelectedSession(null);
-    localStorage.removeItem('last_session_v2');
-    setIsLiveMode(false);
-    setInitialPrompt(null);
+    const update = () => {
+      setSelectedSession(null);
+      localStorage.removeItem('last_session_v2');
+      setIsLiveMode(false);
+      setInitialPrompt(null);
+    };
+    // View Transitions API (2026 standard)
+    if (document.startViewTransition) {
+       // View Transitions API (2026 standard)
+       document.startViewTransition(update);
+    } else {
+       update();
+    }
   };
 
   const handlePromptSubmit = (text: string) => {
@@ -113,13 +141,13 @@ function App() {
                <div className="header-tabs">
                  <button 
                    className={`tab-btn ${!isLiveMode ? 'active' : ''}`}
-                   onClick={() => setIsLiveMode(false)}
+                   onClick={() => toggleLiveMode(false)}
                  >
                    历史
                  </button>
                  <button 
                    className={`tab-btn ${isLiveMode ? 'active' : ''}`}
-                   onClick={() => setIsLiveMode(true)}
+                   onClick={() => toggleLiveMode(true)}
                  >
                    交互
                  </button>

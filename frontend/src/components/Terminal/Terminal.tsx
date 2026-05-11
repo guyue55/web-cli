@@ -51,6 +51,173 @@ const IconProcess = ({ name }: { name: string }) => {
 // eslint-disable-next-line no-control-regex
 const stripAnsi = (str: string) => str.replace(/[\u001b\u009b][[()#;?]*(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d/#&.:=?%@~]*)*)?\u0007/g, '');
 
+const TerminalStatusBar = React.memo(({ ws, status }: { ws: WebSocket | null, status: string }) => {
+  const [latency, setLatency] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (status !== 'connected' || !ws) return;
+    
+    let lastPing = 0;
+    const onMessage = (event: MessageEvent) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.type === 'pong') {
+          setLatency(Date.now() - lastPing);
+        }
+      } catch { /* ignore */ }
+    };
+
+    ws.addEventListener('message', onMessage);
+
+    const heartbeat = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        lastPing = Date.now();
+        ws.send(JSON.stringify({ type: 'ping' }));
+      }
+    }, 5000);
+
+    return () => {
+      ws.removeEventListener('message', onMessage);
+      clearInterval(heartbeat);
+    };
+  }, [ws, status]);
+
+  return (
+    <div className="terminal-footer-status glass-effect">
+       <div className="footer-left">
+          <span className="footer-info-item"><span className="label">环境:</span> node v24.13.0</span>
+          <span className="footer-info-item"><span className="label">渲染:</span> xterm-webgl</span>
+       </div>
+       <div className="footer-right">
+          <span className="footer-info-item">
+            <span className="status-dot-mini connected" />
+            加密隧道已建立
+          </span>
+          {latency !== null && (
+            <span className="footer-info-item"><span className="label">延迟:</span> {latency}ms</span>
+          )}
+       </div>
+    </div>
+  );
+});
+
+const TerminalHeader = React.memo(({ 
+  status, 
+  errorPerceived, 
+  isPulseActive, 
+  isPaletteOpen, 
+  isSearchVisible, 
+  isFocusMode, 
+  isHelperVisible, 
+  isMobile,
+  searchQuery,
+  searchMatches,
+  onExplain,
+  onTogglePalette,
+  onToggleSearch,
+  onToggleFocus,
+  onToggleHelper,
+  onRestart,
+  onInterrupt,
+  onClear,
+  onSearch
+}: {
+  status: string,
+  errorPerceived: boolean,
+  isPulseActive: boolean,
+  isPaletteOpen: boolean,
+  isSearchVisible: boolean,
+  isFocusMode: boolean,
+  isHelperVisible: boolean,
+  isMobile: boolean,
+  searchQuery: string,
+  searchMatches: { current: number, total: number },
+  onExplain: () => void,
+  onTogglePalette: () => void,
+  onToggleSearch: () => void,
+  onToggleFocus: () => void,
+  onToggleHelper: () => void,
+  onRestart: () => void,
+  onInterrupt: () => void,
+  onClear: () => void,
+  onSearch: (q: string, dir?: 'next' | 'prev') => void
+}) => {
+  return (
+    <div className="terminal-toolbar premium-header">
+      <div className="terminal-title">
+         <div className={`gemini-logo-container ${isPulseActive ? 'pulsing' : ''}`}>
+           <IconGemini /> 
+         </div>
+         <span className="terminal-name">Gemini 执行环境</span>
+      </div>
+
+      <div className="instance-status-pill-premium">
+         <div className={`status-glow-ring ${status}`}></div>
+         <span className={`status-dot-v2 ${status}`} />
+         <span className="status-text">{status === 'connected' ? '执行中' : status === 'connecting' ? '正在连接' : '已断开'}</span>
+      </div>
+      
+      <div className="toolbar-actions-group">
+         <div className="action-button-group">
+           <button 
+             className={`terminal-btn-gemini ai-highlight ${errorPerceived ? 'error-perceived' : ''}`} 
+             title={errorPerceived ? "检测到错误，交给 AI 解释" : "AI 解释当前内容"} 
+             onClick={(e) => { e.stopPropagation(); onExplain(); }}
+           >
+             <span className="material-symbols-outlined">auto_awesome</span>
+           </button>
+           <button 
+             className={`terminal-btn-gemini ${isPaletteOpen ? 'active' : ''}`}
+             title="指令历史 (Cmd/Ctrl+P)"
+             onClick={(e) => { e.stopPropagation(); onTogglePalette(); }}
+           >
+             <span className="material-symbols-outlined">auto_fix_high</span>
+           </button>
+         </div>
+
+         {isSearchVisible && (
+           <div className="terminal-search-bar-pro glass-effect" onClick={(e) => e.stopPropagation()}>
+             <span className="material-symbols-outlined">search</span>
+             <input 
+               type="text" 
+               placeholder="搜索内容..." 
+               autoFocus
+               onChange={(e) => onSearch(e.target.value)}
+               onKeyDown={(e) => {
+                 if (e.key === 'Enter') onSearch((e.target as HTMLInputElement).value);
+                 if (e.key === 'Escape') onToggleSearch();
+               }}
+             />
+             <div className="search-count">{searchMatches.total > 0 ? `${searchMatches.current}/${searchMatches.total}` : '0/0'}</div>
+             <button onClick={() => onSearch(searchQuery, 'prev')}><IconArrowDown /></button>
+             <button onClick={onToggleSearch}><IconInterrupt /></button>
+           </div>
+         )}
+
+         <div className="action-button-group">
+           <button className={`terminal-btn-gemini ${isSearchVisible ? 'active' : ''}`} title="查找 (Ctrl+F)" onClick={onToggleSearch}><span className="material-symbols-outlined">search</span></button>
+           <button className="terminal-btn-gemini" title="中断 (Ctrl+C)" onClick={onInterrupt}><IconInterrupt /></button>
+           <button className="terminal-btn-gemini" title="重置终端" onClick={onClear}><IconClear /></button>
+         </div>
+
+         {isMobile && (
+           <button 
+             className={`terminal-btn-gemini ${isHelperVisible ? 'active' : ''}`}
+             onClick={onToggleHelper}
+           >
+             <span className="material-symbols-outlined">keyboard</span>
+           </button>
+         )}
+
+         <div className="action-button-group">
+           <button className="terminal-btn-gemini" onClick={onToggleFocus}>{isFocusMode ? <IconShrink /> : <IconExpand />}</button>
+           <button className="terminal-btn-official-accent" onClick={onRestart}><IconRefresh /></button>
+         </div>
+      </div>
+    </div>
+  );
+});
+
 const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, theme, onSendToChat }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
@@ -59,6 +226,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
   const searchAddonRef = useRef<SearchAddon | null>(null);
 
   const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
+  const [wsInstance, setWsInstance] = useState<WebSocket | null>(null);
   const [systemError, setSystemError] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
   const [isFocusMode, setIsFocusMode] = useState(false);
@@ -72,7 +240,6 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
   const [altLatched, setAltLatched] = useState(false);
   const [isHelperVisible, setIsHelperVisible] = useState(true);
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
-  const [latency, setLatency] = useState<number | null>(null);
   const [fontSize, setFontSize] = useState(14);
   const [errorPerceived, setErrorPerceived] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -161,27 +328,6 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
     };
   }, []);
-
-  useEffect(() => {
-    if (status !== 'connected') return;
-    const interval = setInterval(() => {
-      const start = Date.now();
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'ping' }));
-        const onPong = (e: MessageEvent) => {
-          try {
-            const data = JSON.parse(e.data);
-            if (data.type === 'pong') {
-              setLatency(Date.now() - start);
-              wsRef.current?.removeEventListener('message', onPong);
-            }
-          } catch { /* ignore */ }
-        };
-        wsRef.current.addEventListener('message', onPong);
-      }
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [status]);
 
   const sendKey = useCallback((key: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -286,8 +432,13 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       if (selection && selection.rangeCount > 0) {
         const range = selection.getRangeAt(0);
         const rect = range.getBoundingClientRect();
-        // Pinpoint positioning for selection popup
-        setSelectionPosition({ x: rect.left + rect.width / 2, y: rect.top - 54 });
+
+        // Premium Anchor-Simulation Positioning
+        // Uses fixed coordinates to avoid container shifts
+        setSelectionPosition({ 
+           x: Math.round(rect.left + rect.width / 2), 
+           y: Math.round(rect.top - 58) 
+        });
       }
     } else {
       setSelectionPosition(null);
@@ -309,6 +460,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     const wsUrl = `ws://${host}:3001?uuid=${activeTabId}&projectPath=${encodeURIComponent(projectPath)}${dimensions}`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
+    setWsInstance(ws);
 
     ws.onopen = () => {
       setStatus('connected');
@@ -348,15 +500,39 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
 
     ws.onerror = () => setStatus('disconnected');
 
-    let lastPing = 0;
+    const writeBuffer: string[] = [];
+    let rafId: number;
+
+    const flushBuffer = async () => {
+      if (writeBuffer.length > 0 && xtermRef.current) {
+        const term = xtermRef.current;
+        const isAtBottom = term.buffer.active.viewportY >= term.buffer.active.baseY - 1;
+        
+        // Batch write
+        term.write(writeBuffer.join(''));
+        writeBuffer.length = 0;
+        
+        if (isAtBottom) term.scrollToBottom();
+        setIsPulseActive(true);
+        setTimeout(() => setIsPulseActive(false), 200);
+
+        // Yield to maintain high INP (2026 standard)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ('scheduler' in window && (window as any).scheduler.yield) {
+           // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           await (window as any).scheduler.yield();
+        }
+      }
+      rafId = requestAnimationFrame(() => flushBuffer());
+    };
+    rafId = requestAnimationFrame(() => flushBuffer());
+
     ws.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
         if (payload.type === 'output' && xtermRef.current) {
-          const term = xtermRef.current;
           const data = payload.data;
-          const isAtBottom = term.buffer.active.viewportY >= term.buffer.active.baseY - 1;
-          term.write(data);
+          writeBuffer.push(data);
           
           if (data.toLowerCase().includes('error') || data.toLowerCase().includes('failed')) {
             setErrorPerceived(true);
@@ -364,31 +540,16 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
           if (data.includes('[System Error]') || data.includes('[Critical Error]')) {
             setSystemError(stripAnsi(data).replace(/\[(System|Critical) Error\]/, '').trim());
           }
-          
-          // Smooth auto-scroll
-          if (isAtBottom) {
-             term.scrollToBottom();
-          }
-          
-          setIsPulseActive(true);
-          setTimeout(() => setIsPulseActive(false), 200);
         } else if (payload.type === 'exit') {
           setStatus('disconnected');
-        } else if (payload.type === 'pong') {
-           setLatency(Date.now() - lastPing);
         }
       } catch { /* ignore */ }
     };
 
-    // Heartbeat interval
-    const heartbeat = setInterval(() => {
-       if (ws.readyState === WebSocket.OPEN) {
-          lastPing = Date.now();
-          ws.send(JSON.stringify({ type: 'ping' }));
-       }
-    }, 5000);
-
-    ws.addEventListener('close', () => clearInterval(heartbeat));
+    ws.addEventListener('close', () => {
+       cancelAnimationFrame(rafId);
+       setWsInstance(null);
+    });
   }, [activeTabId, projectPath, initialPrompt]);
 
   const scrollToBottom = () => {
@@ -663,78 +824,27 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
          <button className="add-tab-btn" onClick={addTab}>+</button>
       </div>
 
-      <div className="terminal-toolbar premium-header">
-        <div className="terminal-title">
-           <div className={`gemini-logo-container ${isPulseActive ? 'pulsing' : ''}`}>
-             <IconGemini /> 
-           </div>
-           <span className="terminal-name">Gemini 执行环境</span>
-        </div>
-
-        <div className="instance-status-pill-premium">
-           <div className={`status-glow-ring ${status}`}></div>
-           <span className={`status-dot-v2 ${status}`} />
-           <span className="status-text">{status === 'connected' ? '执行中' : status === 'connecting' ? '正在连接' : '已断开'}</span>
-        </div>
-        
-        <div className="toolbar-actions-group">
-           <div className="action-button-group">
-             <button 
-               className={`terminal-btn-gemini ai-highlight ${errorPerceived ? 'error-perceived' : ''}`} 
-               title={errorPerceived ? "检测到错误，交给 AI 解释" : "AI 解释当前内容"} 
-               onClick={(e) => { e.stopPropagation(); explainWithGemini(); }}
-             >
-               <span className="material-symbols-outlined">auto_awesome</span>
-             </button>
-             <button 
-               className={`terminal-btn-gemini ${isPaletteOpen ? 'active' : ''}`}
-               title="指令历史 (Cmd/Ctrl+P)"
-               onClick={(e) => { e.stopPropagation(); setIsPaletteOpen(!isPaletteOpen); }}
-             >
-               <span className="material-symbols-outlined">auto_fix_high</span>
-             </button>
-           </div>
-
-           {isSearchVisible && (
-             <div className="terminal-search-bar-pro glass-effect" onClick={(e) => e.stopPropagation()}>
-               <span className="material-symbols-outlined">search</span>
-               <input 
-                 type="text" 
-                 placeholder="搜索内容..." 
-                 autoFocus
-                 onChange={(e) => handleSearch(e.target.value)}
-                 onKeyDown={(e) => {
-                   if (e.key === 'Enter') handleSearch((e.target as HTMLInputElement).value);
-                   if (e.key === 'Escape') setIsSearchVisible(false);
-                 }}
-               />
-               <div className="search-count">{searchMatches.total > 0 ? `${searchMatches.current}/${searchMatches.total}` : '0/0'}</div>
-               <button onClick={() => handleSearch(searchQuery, 'prev')}><IconArrowDown /></button>
-               <button onClick={() => setIsSearchVisible(false)}><IconInterrupt /></button>
-             </div>
-           )}
-
-           <div className="action-button-group">
-             <button className={`terminal-btn-gemini ${isSearchVisible ? 'active' : ''}`} title="查找 (Ctrl+F)" onClick={() => setIsSearchVisible(!isSearchVisible)}><span className="material-symbols-outlined">search</span></button>
-             <button className="terminal-btn-gemini" title="中断 (Ctrl+C)" onClick={() => sendKey('\x03')}><IconInterrupt /></button>
-             <button className="terminal-btn-gemini" title="重置终端" onClick={() => xtermRef.current?.reset()}><IconClear /></button>
-           </div>
-
-           {isMobile && (
-             <button 
-               className={`terminal-btn-gemini ${isHelperVisible ? 'active' : ''}`}
-               onClick={() => setIsHelperVisible(!isHelperVisible)}
-             >
-               <span className="material-symbols-outlined">keyboard</span>
-             </button>
-           )}
-
-           <div className="action-button-group">
-             <button className="terminal-btn-gemini" onClick={() => setIsFocusMode(!isFocusMode)}>{isFocusMode ? <IconShrink /> : <IconExpand />}</button>
-             <button className="terminal-btn-official-accent" onClick={() => handleForceRestart()}><IconRefresh /></button>
-           </div>
-        </div>
-      </div>
+      <TerminalHeader 
+        status={status}
+        errorPerceived={errorPerceived}
+        isPulseActive={isPulseActive}
+        isPaletteOpen={isPaletteOpen}
+        isSearchVisible={isSearchVisible}
+        isFocusMode={isFocusMode}
+        isHelperVisible={isHelperVisible}
+        isMobile={isMobile}
+        searchQuery={searchQuery}
+        searchMatches={searchMatches}
+        onExplain={() => explainWithGemini()}
+        onTogglePalette={() => setIsPaletteOpen(!isPaletteOpen)}
+        onToggleSearch={() => setIsSearchVisible(!isSearchVisible)}
+        onToggleFocus={() => setIsFocusMode(!isFocusMode)}
+        onToggleHelper={() => setIsHelperVisible(!isHelperVisible)}
+        onRestart={handleForceRestart}
+        onInterrupt={() => sendKey('\x03')}
+        onClear={() => xtermRef.current?.reset()}
+        onSearch={handleSearch}
+      />
       
       <div className="terminal-inner">
         <div ref={terminalRef} className="xterm-container-gemini" />
@@ -886,21 +996,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
         )}
       </div>
 
-      <div className="terminal-footer-status glass-effect">
-         <div className="footer-left">
-            <span className="footer-info-item"><span className="label">环境:</span> node v24.13.0</span>
-            <span className="footer-info-item"><span className="label">渲染:</span> xterm-webgl</span>
-         </div>
-         <div className="footer-right">
-            <span className="footer-info-item">
-              <span className="status-dot-mini connected" />
-              加密隧道已建立
-            </span>
-            {latency !== null && (
-              <span className="footer-info-item"><span className="label">延迟:</span> {latency}ms</span>
-            )}
-         </div>
-      </div>
+      <TerminalStatusBar ws={wsInstance} status={status} />
     </div>
   );
 };

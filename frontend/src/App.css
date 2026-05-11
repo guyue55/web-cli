@@ -1,4 +1,7 @@
 :root {
+  /* 2026 Layout Standards */
+  interpolate-size: allow-keywords;
+  
   /* Default: Light Theme (Gemini Official) */
   --bg-main: #ffffff;
   --bg-sidebar: rgba(240, 244, 249, 0.65);
