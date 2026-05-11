@@ -347,6 +347,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
 
     ws.onerror = () => setStatus('disconnected');
 
+    let lastPing = 0;
     ws.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
@@ -362,16 +363,39 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
           if (data.includes('[System Error]') || data.includes('[Critical Error]')) {
             setSystemError(stripAnsi(data).replace(/\[(System|Critical) Error\]/, '').trim());
           }
-          if (isAtBottom) term.scrollToBottom();
+          
+          // Smooth auto-scroll
+          if (isAtBottom) {
+             term.scrollToBottom();
+          }
           
           setIsPulseActive(true);
           setTimeout(() => setIsPulseActive(false), 200);
         } else if (payload.type === 'exit') {
           setStatus('disconnected');
+        } else if (payload.type === 'pong') {
+           setLatency(Date.now() - lastPing);
         }
       } catch { /* ignore */ }
     };
+
+    // Heartbeat interval
+    const heartbeat = setInterval(() => {
+       if (ws.readyState === WebSocket.OPEN) {
+          lastPing = Date.now();
+          ws.send(JSON.stringify({ type: 'ping' }));
+       }
+    }, 5000);
+
+    ws.addEventListener('close', () => clearInterval(heartbeat));
   }, [activeTabId, projectPath, initialPrompt]);
+
+  const scrollToBottom = () => {
+    if (xtermRef.current) {
+      xtermRef.current.scrollToBottom();
+      setHasNewContent(false);
+    }
+  };
 
   // Handle subsequent prompt submissions without terminal re-init
   useEffect(() => {
@@ -443,14 +467,16 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     fitAddonRef.current = fitAddon;
     
     // Industrial-grade resize observation
+    let resizeTimeout: ReturnType<typeof setTimeout>;
     const resizeObserver = new ResizeObserver(() => {
        if (terminalRef.current?.offsetParent) {
-          setTimeout(() => {
+          clearTimeout(resizeTimeout);
+          resizeTimeout = setTimeout(() => {
              fitAddon.fit();
              if (wsRef.current?.readyState === WebSocket.OPEN) {
                 wsRef.current.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
              }
-          }, 60);
+          }, 150); // Increased delay for mobile keyboard animations
        }
     });
     resizeObserver.observe(terminalRef.current);
@@ -521,8 +547,18 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     const handleContainerClick = () => { term.focus(); setContextMenu(null); };
     const handleContextMenu = (e: MouseEvent) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY }); };
     
+    const handleTouch = (e: TouchEvent) => {
+       // Only stop propagation if we are interacting with the terminal content
+       // This prevents accidental sidebar swipes
+       if (termNode && termNode.contains(e.target as Node)) {
+          e.stopPropagation();
+       }
+    };
+
     termNode.addEventListener('click', handleContainerClick);
     termNode.addEventListener('contextmenu', handleContextMenu);
+    termNode.addEventListener('touchstart', handleTouch, { passive: true });
+    termNode.addEventListener('touchmove', handleTouch, { passive: true });
     termNode.addEventListener('dragover', (e) => e.preventDefault());
 
     return () => {
@@ -530,6 +566,8 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       observer.disconnect();
       termNode.removeEventListener('click', handleContainerClick);
       termNode.removeEventListener('contextmenu', handleContextMenu);
+      termNode.removeEventListener('touchstart', handleTouch);
+      termNode.removeEventListener('touchmove', handleTouch);
       if (wsRef.current) {
         wsRef.current.onclose = null;
         wsRef.current.close();
@@ -790,7 +828,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
         )}
 
         {hasNewContent && (
-          <button className="scroll-bottom-fab" onClick={() => xtermRef.current?.scrollToBottom()}>
+          <button className="scroll-bottom-fab" onClick={scrollToBottom}>
              <IconArrowDown /> 最新输出
           </button>
         )}
