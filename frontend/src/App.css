@@ -2303,14 +2303,14 @@ body, html, #root {
 
 /* Context Menu */
 .terminal-context-menu {
-  position: fixed;
+  position: absolute;
   z-index: 3000;
   background-color: var(--bg-main);
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
   padding: 6px;
-  min-width: 160px;
-  box-shadow: 0 12px 32px rgba(0,0,0,0.15);
+  min-width: 180px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.3);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -2319,11 +2319,13 @@ body, html, #root {
 
 .terminal-context-menu.glass-effect {
   background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(16px);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .dark .terminal-context-menu.glass-effect {
-  background: rgba(30, 31, 32, 0.85);
+  background: rgba(30, 31, 32, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .menu-item {

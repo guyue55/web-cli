@@ -241,6 +241,7 @@ const TerminalHeader = React.memo(({
 
 const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, theme, onSendToChat }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -276,20 +277,41 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     const saved = localStorage.getItem('terminal_tabs_v4');
     return saved ? JSON.parse(saved) : [{ id: uuid, label: 'Gemini', color: 'blue' }];
   });
-  const [activeTabId, setActiveTabId] = useState(uuid);
+  const [activeTabId, setActiveTabId] = useState(() => {
+    const saved = localStorage.getItem('terminal_active_tab_id');
+    // Ensure the saved ID actually exists in the loaded tabs, otherwise fallback to uuid
+    const savedTabs = localStorage.getItem('terminal_tabs_v4');
+    const tabsList = savedTabs ? (JSON.parse(savedTabs) as {id: string}[]) : [];
+    if (saved && tabsList.some((t) => t.id === saved)) return saved;
+    return uuid;
+  });
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [tabContextMenu, setTabContextMenu] = useState<{ x: number, y: number, id: string } | null>(null);
 
   const lastTapRef = useRef<number>(0);
+  const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const executionLockedRef = useRef<string | null>(null);
   const connectRef = useRef<(cols?: number, rows?: number) => void>(() => {});
 
-  const triggerHaptic = useCallback(() => {
-    if (isMobile && window.navigator.vibrate) {
-      window.navigator.vibrate(10);
-    }
+  const handleTabSwitch = (id: string) => {
+    setActiveTabId(id);
+    localStorage.setItem('terminal_active_tab_id', id);
+    triggerHaptic();
+  };
+
+  const triggerHapticRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    triggerHapticRef.current = () => {
+      if (isMobile && window.navigator.vibrate) {
+        window.navigator.vibrate(10);
+      }
+    };
   }, [isMobile]);
+
+  const triggerHaptic = useCallback(() => {
+    triggerHapticRef.current();
+  }, []);
 
   const addTab = () => {
     const newId = `${uuid}-tab-${tabs.length}`;
@@ -343,7 +365,6 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     
     return () => {
       window.removeEventListener('resize', checkMobile);
-      // eslint-disable-next-line react-hooks/exhaustive-deps
       const currentTimer = reconnectTimerRef.current;
       if (currentTimer) clearTimeout(currentTimer);
     };
@@ -365,18 +386,40 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     }
   }, [ctrlLatched, altLatched, triggerHaptic]);
 
-  const handleCopy = useCallback(() => {
+  const handleCopy = useCallback(async () => {
     if (xtermRef.current) {
       const content = xtermRef.current.getSelection() || '';
-      if (content) {
-        navigator.clipboard.writeText(content);
-      } else {
+      let textToCopy = content;
+      
+      if (!textToCopy) {
         xtermRef.current.selectAll();
-        navigator.clipboard.writeText(xtermRef.current.getSelection());
+        textToCopy = xtermRef.current.getSelection();
         xtermRef.current.clearSelection();
       }
-      setIsCopied(true);
-      setTimeout(() => setIsCopied(false), 2000);
+
+      if (textToCopy) {
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(textToCopy);
+          } else {
+            throw new Error('Clipboard API unavailable');
+          }
+        } catch {
+          // Fallback to legacy copy
+          const textArea = document.createElement("textarea");
+          textArea.value = textToCopy;
+          textArea.style.position = "fixed";
+          textArea.style.left = "-9999px";
+          textArea.style.top = "0";
+          document.body.appendChild(textArea);
+          textArea.focus();
+          textArea.select();
+          document.execCommand("copy");
+          document.body.removeChild(textArea);
+        }
+        setIsCopied(true);
+        setTimeout(() => setIsCopied(false), 2000);
+      }
       setContextMenu(null);
       setSelectionPosition(null);
       triggerHaptic();
@@ -385,12 +428,26 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
 
   const handlePaste = useCallback(async () => {
     try {
-      const text = await navigator.clipboard.readText();
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'input', data: text }));
+      if (navigator.clipboard && navigator.clipboard.readText) {
+        const text = await navigator.clipboard.readText();
+        if (text && wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: 'input', data: text }));
+        }
       }
     } catch (err) {
       console.error('Failed to read clipboard', err);
+    }
+    setContextMenu(null);
+    triggerHaptic();
+  }, [triggerHaptic]);
+
+  const handleClear = useCallback(() => {
+    if (xtermRef.current) {
+      xtermRef.current.clear();
+      // Send Ctrl+L (\x0c) to re-draw shell prompt
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'input', data: '\x0c' }));
+      }
     }
     setContextMenu(null);
     triggerHaptic();
@@ -494,6 +551,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
 
     ws.onopen = () => {
       setStatus('connected');
+      reconnectAttemptsRef.current = 0;
       if (!initialCols && xtermRef.current) {
         fitAddonRef.current?.fit();
         const { cols, rows } = xtermRef.current;
@@ -522,12 +580,20 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     };
 
     ws.onerror = () => {
-      setStatus('disconnected');
-      setSystemError('无法建立 WebSocket 连接。执行环境可能已关闭或网络受限。');
+      // 2026 Resilience: Silent retry for transient handshake failures during refresh
+      if (reconnectAttemptsRef.current < 3) {
+        console.warn('[Terminal] WebSocket handshake failed, retrying silently...');
+        reconnectAttemptsRef.current += 1;
+        reconnectTimerRef.current = setTimeout(() => connectRef.current(initialCols, initialRows), 1000);
+      } else {
+        setStatus('disconnected');
+        setSystemError('无法建立 WebSocket 连接。执行环境可能已关闭或网络受限。');
+      }
     };
 
     const writeBuffer: string[] = [];
     let rafId: number;
+    let isInitialBuffer = true;
 
     const flushBuffer = async () => {
       if (writeBuffer.length > 0 && xtermRef.current) {
@@ -541,10 +607,8 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
         if (isAtBottom) term.scrollToBottom();
 
         // Yield to maintain high INP (2026 standard)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if ('scheduler' in window && (window as any).scheduler.yield) {
-           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-           await (window as any).scheduler.yield();
+        if ('scheduler' in window && typeof (window as unknown as {scheduler: {yield: () => Promise<void>}}).scheduler.yield === 'function') {
+           await (window as unknown as {scheduler: {yield: () => Promise<void>}}).scheduler.yield();
         }
       }
       rafId = requestAnimationFrame(() => flushBuffer());
@@ -558,9 +622,10 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
           const data = payload.data;
           writeBuffer.push(data);
           
-          if (data.includes('[System Error]') || data.includes('[Critical Error]')) {
+          if (!isInitialBuffer && (data.includes('[System Error]') || data.includes('[Critical Error]'))) {
             setSystemError(stripAnsi(data).replace(/\[(System|Critical) Error\]/, '').trim());
           }
+          isInitialBuffer = false;
         } else if (payload.type === 'exit') {
           setStatus('disconnected');
         }
@@ -684,9 +749,11 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     resizeObserver.observe(terminalRef.current);
 
     setTimeout(() => {
-      fitAddon.fit();
-      connect(term.cols, term.rows);
-    }, 100);
+      if (xtermRef.current) {
+        fitAddonRef.current?.fit();
+        connect(xtermRef.current.cols, xtermRef.current.rows);
+      }
+    }, 300); // Increased delay for stability on refresh
 
     term.onData(data => {
       // 2026 Resilience: Suppress Device Attributes (DA) ghost responses (e.g. \x1b[?1;2c)
@@ -751,7 +818,23 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
 
     const termNode = terminalRef.current;
     const handleContainerClick = () => { term.focus(); setContextMenu(null); };
-    const handleContextMenu = (e: MouseEvent) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY }); };
+    const handleContextMenu = (e: MouseEvent) => { 
+      e.preventDefault(); 
+      if (!wrapperRef.current) return;
+      const rect = wrapperRef.current.getBoundingClientRect();
+      let x = e.clientX - rect.left;
+      let y = e.clientY - rect.top;
+      
+      // Boundary checks (Industrial Grade)
+      const menuWidth = 190;
+      const menuHeight = 250;
+      if (x + menuWidth > rect.width) x -= menuWidth;
+      if (y + menuHeight > rect.height) y -= menuHeight;
+      if (x < 5) x = 5;
+      if (y < 5) y = 5;
+
+      setContextMenu({ x, y }); 
+    };
     
     const handleTouch = (e: TouchEvent) => {
        // Only stop propagation if we are interacting with the terminal content
@@ -815,6 +898,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
 
   return (
     <div 
+      ref={wrapperRef}
       className={`terminal-wrapper ${theme || 'light'} ${isFocusMode ? 'fullscreen-focus' : ''} ${isFocusHighlight ? 'focused' : ''} ${visualBell ? 'visual-bell-active' : ''} ${(systemError || status === 'disconnected') && !isOverlayDismissed ? 'overlay-active' : ''}`}
       onClick={() => { setContextMenu(null); setIsPaletteOpen(false); setTabContextMenu(null); }}
       onTouchEnd={isMobile ? handleDoubleTap : undefined}
@@ -824,11 +908,13 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
            <div 
              key={tab.id} 
              className={`terminal-tab ${activeTabId === tab.id ? 'active' : ''} tab-color-${tab.color || 'blue'}`}
-             onClick={() => setActiveTabId(tab.id)}
+             onClick={() => handleTabSwitch(tab.id)}
              onDoubleClick={() => setEditingTabId(tab.id)}
              onContextMenu={(e) => {
                e.preventDefault();
-               setTabContextMenu({ x: e.clientX, y: e.clientY, id: tab.id });
+               if (!wrapperRef.current) return;
+               const rect = wrapperRef.current.getBoundingClientRect();
+               setTabContextMenu({ x: e.clientX - rect.left, y: e.clientY - rect.top, id: tab.id });
              }}
            >
              <IconProcess name={tab.label} />
@@ -866,7 +952,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
         onToggleHelper={() => setIsHelperVisible(!isHelperVisible)}
         onRestart={handleForceRestart}
         onInterrupt={() => sendKey('\x03')}
-        onClear={() => xtermRef.current?.reset()}
+        onClear={handleClear}
         onSearch={handleSearch}
       />
       
@@ -951,10 +1037,10 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
             </div>
             <div className="menu-divider" />
             <div className="menu-item" onClick={handleCopy}><IconCopy /> 复制 (Copy) <span className="menu-shortcut">Cmd+C</span></div>
-            <div className="menu-item" onClick={handlePaste}><IconDownload /> 粘贴 (Paste) <span className="menu-shortcut">Cmd+V</span></div>
+            <div className="menu-item" onClick={handlePaste}><span className="material-symbols-outlined">content_paste</span> 粘贴 (Paste) <span className="menu-shortcut">Cmd+V</span></div>
             <div className="menu-divider" />
             <div className="menu-item" onClick={handleDownload}><IconDownload /> 下载完整日志</div>
-            <div className="menu-item" onClick={() => { xtermRef.current?.reset(); setContextMenu(null); }}><IconClear /> 清除屏幕 (Clear)</div>
+            <div className="menu-item" onClick={handleClear}><IconClear /> 清除屏幕 (Clear)</div>
           </div>
         )}
 
