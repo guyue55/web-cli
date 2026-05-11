@@ -60,14 +60,29 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
   const [searchQuery, setSearchQuery] = useState('');
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
   const [visualBell, setVisualBell] = useState(false);
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  const [selectionPosition, setSelectionPosition] = useState<{ x: number, y: number } | null>(null);
   const [ctrlLatched, setCtrlLatched] = useState(false);
   const [altLatched, setAltLatched] = useState(false);
-  
+  const [isHelperVisible, setIsHelperVisible] = useState(true);
+
+  const lastTapRef = useRef<number>(0);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const executionLockedRef = useRef<string | null>(null);
-  const connectRef = useRef<() => void>(() => {});
+  const connectRef = useRef<(cols?: number, rows?: number) => void>(() => {});
   const maxReconnectAttempts = 5;
+
+  const QUICK_COMMANDS = [
+    { cmd: '/help', label: '获取全部指令帮助' },
+    { cmd: '/memory show', label: '查看当前项目记忆' },
+    { cmd: '/skills list', label: '列出已加载的代理技能' },
+    { cmd: 'ls -laR', label: '递归列出所有文件' },
+    { cmd: 'git status -sb', label: '精简版 Git 状态' },
+    { cmd: 'npm run dev', label: '启动本地开发服务器' },
+    { cmd: '/reset', label: '强制重置当前会话' },
+    { cmd: '/exit', label: '关闭并安全退出会话' },
+  ];
 
   useEffect(() => {
     const checkMobile = () => {
@@ -75,8 +90,23 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     };
     checkMobile();
     window.addEventListener('resize', checkMobile);
+    
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && xtermRef.current && fitAddonRef.current) {
+        setTimeout(() => {
+          try { 
+            fitAddonRef.current?.fit(); 
+            xtermRef.current?.focus();
+          } catch { /* ignore */ }
+        }, 50);
+      }
+    }, { threshold: 0.1 });
+
+    if (terminalRef.current) observer.observe(terminalRef.current);
+
     return () => {
       window.removeEventListener('resize', checkMobile);
+      observer.disconnect();
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
     };
   }, []);
@@ -84,18 +114,14 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
   const sendKey = useCallback((key: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       let finalKey = key;
-      
       if (ctrlLatched && key.length === 1) {
         const code = key.toUpperCase().charCodeAt(0) - 64;
-        if (code >= 1 && code <= 26) {
-          finalKey = String.fromCharCode(code);
-        }
+        if (code >= 1 && code <= 26) finalKey = String.fromCharCode(code);
         setCtrlLatched(false);
       } else if (altLatched && key.length === 1) {
         finalKey = '\x1b' + key;
         setAltLatched(false);
       }
-      
       wsRef.current.send(JSON.stringify({ type: 'input', data: finalKey }));
     }
   }, [ctrlLatched, altLatched]);
@@ -113,6 +139,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
       setContextMenu(null);
+      setSelectionPosition(null);
     }
   }, []);
 
@@ -126,6 +153,31 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       console.error('Failed to read clipboard', err);
     }
     setContextMenu(null);
+  }, []);
+
+  const handleSearch = useCallback((query: string) => {
+    setSearchQuery(query);
+    searchAddonRef.current?.findNext(query);
+  }, []);
+
+  const runCommand = useCallback((cmd: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'input', data: cmd + '\r' }));
+    }
+    setIsLibraryOpen(false);
+  }, []);
+
+  const handleSelectionChange = useCallback(() => {
+    if (!xtermRef.current) return;
+    const selection = xtermRef.current.getSelection();
+    if (selection && selection.length > 0) {
+      const range = window.getSelection()?.getRangeAt(0).getBoundingClientRect();
+      if (range) {
+        setSelectionPosition({ x: range.left + range.width / 2, y: range.top - 40 });
+      }
+    } else {
+      setSelectionPosition(null);
+    }
   }, []);
 
   const connect = useCallback((initialCols?: number, initialRows?: number) => {
@@ -147,15 +199,11 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     ws.onopen = () => {
       setStatus('connected');
       reconnectAttemptsRef.current = 0;
-      
-      // Re-sync on open if not initially provided
       if (!initialCols && xtermRef.current) {
         fitAddonRef.current?.fit();
         const { cols, rows } = xtermRef.current;
         ws.send(JSON.stringify({ type: 'resize', cols, rows }));
       }
-
-      // Reliable execution warmup
       if (initialPrompt && executionLockedRef.current !== `${uuid}-${initialPrompt}`) {
         setTimeout(() => {
           if (ws.readyState === WebSocket.OPEN) {
@@ -164,14 +212,12 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
           }
         }, 600);
       } else if (!initialPrompt) {
-        // Force refresh instead of simple newline
         setTimeout(() => {
           if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'input', data: '\x0c' })); // Ctrl+L (Clear screen/Refresh)
+            ws.send(JSON.stringify({ type: 'input', data: '\x0c' }));
           }
         }, 400);
       }
-      
       setTimeout(() => {
         xtermRef.current?.focus();
         fitAddonRef.current?.fit();
@@ -180,13 +226,11 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
 
     ws.onclose = (event) => {
       setStatus('disconnected');
-      // Exponential Backoff Reconnection Logic (Only if not a manual/graceful close)
       if (event.code !== 1000 && reconnectAttemptsRef.current < maxReconnectAttempts) {
         const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 10000);
-        console.log(`[Terminal] Connection lost. Retrying in ${delay}ms... (Attempt ${reconnectAttemptsRef.current + 1})`);
         reconnectTimerRef.current = setTimeout(() => {
           reconnectAttemptsRef.current += 1;
-          connectRef.current();
+          connectRef.current(initialCols, initialRows);
         }, delay);
       }
     };
@@ -199,19 +243,11 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
         if (payload.type === 'output' && xtermRef.current) {
           const term = xtermRef.current;
           const isAtBottom = term.buffer.active.viewportY >= term.buffer.active.baseY - 1;
-
-          const rawData = payload.data;
-          term.write(rawData);
-
-          if (rawData.includes('[System Error]') || rawData.includes('[Critical Error]')) {
-            const cleanMsg = stripAnsi(rawData).replace(/\[(System|Critical) Error\]/, '').trim();
-            setSystemError(cleanMsg);
+          term.write(payload.data);
+          if (payload.data.includes('[System Error]') || payload.data.includes('[Critical Error]')) {
+            setSystemError(stripAnsi(payload.data).replace(/\[(System|Critical) Error\]/, '').trim());
           }
-
-          if (isAtBottom) {
-            term.scrollToBottom();
-          }
-
+          if (isAtBottom) term.scrollToBottom();
           setIsPulseActive(true);
           setTimeout(() => setIsPulseActive(false), 200);
         } else if (payload.type === 'exit') {
@@ -226,15 +262,8 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
   }, [connect]);
 
   useEffect(() => {
-    if (initialPrompt && wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'input', data: initialPrompt + '\r' }));
-    }
-  }, [initialPrompt]);
-  useEffect(() => {
     if (!terminalRef.current) return;
-
     const isDark = theme === 'dark';
-
     const term = new XTerm({
       cursorBlink: true,
       fontSize: 14,
@@ -265,7 +294,6 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       allowProposedApi: true,
       scrollback: 10000,
       cursorStyle: 'block',
-      cursorInactiveStyle: 'outline',
       convertEol: true,
       minimumContrastRatio: 4.5,
       screenReaderMode: true,
@@ -273,48 +301,20 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
-    
     const unicode11Addon = new Unicode11Addon();
     term.loadAddon(unicode11Addon);
     term.unicode.activeVersion = '11';
-
-    const webLinksAddon = new WebLinksAddon();
-    term.loadAddon(webLinksAddon);
-
+    term.loadAddon(new WebLinksAddon());
     const searchAddon = new SearchAddon();
     term.loadAddon(searchAddon);
     searchAddonRef.current = searchAddon;
 
     term.open(terminalRef.current);
-    
-    // Attempt to load WebGL addon for hardware acceleration
-    try {
-      const webglAddon = new WebglAddon();
-      term.loadAddon(webglAddon);
-    } catch (e) {
-      console.warn('[Terminal] WebGL addon failed to load, falling back to Canvas/DOM', e);
-    }
+    try { term.loadAddon(new WebglAddon()); } catch { /* fallback */ }
 
     xtermRef.current = term;
     fitAddonRef.current = fitAddon;
-
-    // Initial fit and connect with dimensions
     fitAddon.fit();
-    connect(term.cols, term.rows);
-
-    let resizeTimeout: ReturnType<typeof setTimeout>;
-    const ro = new ResizeObserver(() => {
-      clearTimeout(resizeTimeout);
-      resizeTimeout = setTimeout(() => {
-        if (terminalRef.current && xtermRef.current) {
-          try { 
-            fitAddon.fit(); 
-          } catch { /* ignore */ }
-        }
-      }, 150);
-    });
-    ro.observe(terminalRef.current);
-
     connect(term.cols, term.rows);
 
     term.onData(data => {
@@ -323,19 +323,24 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       }
     });
 
-    // Custom Keyboard Shortcuts (Convenience)
+    term.onScroll(() => {
+      const isBottom = term.buffer.active.viewportY >= term.buffer.active.baseY - 2;
+      setHasNewContent(!isBottom);
+    });
+
+    term.onBell(() => {
+      setVisualBell(true);
+      setTimeout(() => setVisualBell(false), 200);
+    });
+
+    term.onSelectionChange(() => handleSelectionChange());
+
     term.attachCustomKeyEventHandler((e) => {
-      // Allow Ctrl+C / Ctrl+V in specific contexts or just let browser handle Cmd
       if (e.type === 'keydown') {
-        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-        
-        // Handle Paste: Ctrl+V (Win/Linux)
-        if (!isMac && e.ctrlKey && e.key === 'v') {
+        if (!((navigator.platform.toUpperCase().indexOf('MAC') >= 0)) && e.ctrlKey && e.key === 'v') {
           handlePaste();
           return false;
         }
-        
-        // Handle Search: Ctrl+F (or Cmd+F)
         if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
           setIsSearchVisible(prev => !prev);
           return false;
@@ -350,105 +355,60 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       }
     });
 
-    term.onBell(() => {
-      setVisualBell(true);
-      setTimeout(() => setVisualBell(false), 200);
-    });
-
-    term.onScroll(() => {
-      const isBottom = term.buffer.active.viewportY >= term.buffer.active.baseY - 2;
-      setHasNewContent(!isBottom);
-    });
-
-    // Handle clicks to focus
-    const handleContainerClick = () => {
-      term.focus();
-      setContextMenu(null);
-    };
-
-    const handleContextMenu = (e: MouseEvent) => {
-      e.preventDefault();
-      setContextMenu({ x: e.clientX, y: e.clientY });
-    };
-
-    const handleDrop = (e: DragEvent) => {
-      e.preventDefault();
-      const text = e.dataTransfer?.getData('text/plain');
-      if (text) {
-        sendKey(text);
-      }
-    };
-
-    const handleDragOver = (e: DragEvent) => {
-      e.preventDefault();
-    };
-    
     const termNode = terminalRef.current;
+    const handleContainerClick = () => { term.focus(); setContextMenu(null); };
+    const handleContextMenu = (e: MouseEvent) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY }); };
+    
     termNode.addEventListener('click', handleContainerClick);
     termNode.addEventListener('contextmenu', handleContextMenu);
-    termNode.addEventListener('drop', handleDrop);
-    termNode.addEventListener('dragover', handleDragOver);
 
     return () => {
-      ro.disconnect();
-      if (termNode) {
-        termNode.removeEventListener('click', handleContainerClick);
-        termNode.removeEventListener('contextmenu', handleContextMenu);
-        termNode.removeEventListener('drop', handleDrop);
-        termNode.removeEventListener('dragover', handleDragOver);
-      }
+      termNode.removeEventListener('click', handleContainerClick);
+      termNode.removeEventListener('contextmenu', handleContextMenu);
       if (wsRef.current) {
         wsRef.current.onclose = null;
         wsRef.current.close();
       }
       term.dispose();
     };
-  }, [uuid, projectPath, theme, connect, handlePaste, sendKey]);
+  }, [uuid, projectPath, theme, connect, handlePaste, handleSelectionChange]);
+
+  const handleDoubleTap = useCallback((e: React.TouchEvent) => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 300) {
+      e.preventDefault();
+      handlePaste();
+    }
+    lastTapRef.current = now;
+  }, [handlePaste]);
 
   const handleForceRestart = async () => {
     try {
       setStatus('connecting');
       await ApiService.restartSession(uuid, projectPath);
       connect(xtermRef.current?.cols, xtermRef.current?.rows);
-    } catch (e) {
-      console.error('Failed to force restart', e);
-      connect();
-    }
+    } catch { connect(); }
   };
 
   const handleDownload = () => {
     if (!xtermRef.current) return;
     xtermRef.current.selectAll();
-    const raw = xtermRef.current.getSelection();
+    const clean = stripAnsi(xtermRef.current.getSelection());
     xtermRef.current.clearSelection();
-    
-    const clean = stripAnsi(raw);
     const blob = new Blob([clean], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    a.download = `terminal-execution-${uuid.slice(0, 8)}-${ts}.log`;
+    a.download = `terminal-execution-${uuid.slice(0, 8)}.log`;
     a.click();
     URL.revokeObjectURL(url);
-  };
-
-  const scrollToBottom = () => {
-    if (xtermRef.current) {
-      xtermRef.current.scrollToBottom();
-      xtermRef.current.focus();
-    }
-  };
-
-  const handleSearch = (query: string) => {
-    setSearchQuery(query);
-    searchAddonRef.current?.findNext(query);
   };
 
   return (
     <div 
       className={`terminal-wrapper ${theme || 'light'} ${isFocusMode ? 'fullscreen-focus' : ''} ${visualBell ? 'visual-bell-active' : ''}`}
       onClick={() => setContextMenu(null)}
+      onTouchEnd={isMobile ? handleDoubleTap : undefined}
     >
       <div className="terminal-toolbar premium-header">
         <div className="terminal-title">
@@ -478,49 +438,53 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
                  }}
                  autoFocus
                />
-               <button onClick={() => searchAddonRef.current?.findPrevious(searchQuery)}>
-                 <span className="material-symbols-outlined">expand_less</span>
-               </button>
-               <button onClick={() => searchAddonRef.current?.findNext(searchQuery)}>
-                 <span className="material-symbols-outlined">expand_more</span>
-               </button>
-               <button onClick={() => setIsSearchVisible(false)}>
-                 <span className="material-symbols-outlined">close</span>
-               </button>
+               <button onClick={() => searchAddonRef.current?.findPrevious(searchQuery)}><IconArrowDown /></button>
+               <button onClick={() => setIsSearchVisible(false)}><IconInterrupt /></button>
              </div>
            )}
 
-           <div className="action-button-group">
-             <button className={`terminal-btn-gemini ${isSearchVisible ? 'active' : ''}`} title="查找 (Ctrl+F)" 
-               onClick={() => setIsSearchVisible(!isSearchVisible)}>
-               <span className="material-symbols-outlined" style={{ fontSize: 18 }}>search</span>
+           {isMobile && (
+             <button 
+               className={`terminal-btn-gemini ${isHelperVisible ? 'active' : ''}`}
+               onClick={() => setIsHelperVisible(!isHelperVisible)}
+             >
+               <span className="material-symbols-outlined">keyboard</span>
              </button>
-             <button className="terminal-btn-gemini" title="中断 (Ctrl+C)" 
-               onClick={() => wsRef.current?.send(JSON.stringify({ type: 'input', data: '\x03' }))}>
-               <IconInterrupt />
+           )}
+
+           <div className="command-library-container">
+             <button 
+               className={`terminal-btn-gemini ${isLibraryOpen ? 'active' : ''}`}
+               onClick={() => setIsLibraryOpen(!isLibraryOpen)}
+             >
+               <span className="material-symbols-outlined">auto_fix_high</span>
              </button>
-             <button className="terminal-btn-gemini" title="重置终端" onClick={() => xtermRef.current?.reset()}>
-               <IconClear />
-             </button>
+             {isLibraryOpen && (
+               <div className="command-library-dropdown glass-effect">
+                 <div className="dropdown-header">常用指令</div>
+                 {QUICK_COMMANDS.map(q => (
+                   <div key={q.cmd} className="dropdown-item" onClick={() => runCommand(q.cmd)}>
+                     <span className="q-cmd">{q.cmd}</span>
+                     <span className="q-label">{q.label}</span>
+                   </div>
+                 ))}
+               </div>
+             )}
            </div>
 
            <div className="action-button-group">
-             <button className="terminal-btn-gemini" title="复制内容" onClick={handleCopy}>
-               {isCopied ? <IconCheck /> : <IconCopy />}
-             </button>
-             <button className="terminal-btn-gemini" title="下载日志" onClick={handleDownload}>
-               <IconDownload />
-             </button>
+             <button className="terminal-btn-gemini" title="中断 (Ctrl+C)" onClick={() => sendKey('\x03')}><IconInterrupt /></button>
+             <button className="terminal-btn-gemini" title="重置终端" onClick={() => xtermRef.current?.reset()}><IconClear /></button>
            </div>
 
            <div className="action-button-group">
-             <button className="terminal-btn-gemini" title={isFocusMode ? "退出全屏" : "全屏模式"} 
-               onClick={() => setIsFocusMode(!isFocusMode)}>
-               {isFocusMode ? <IconShrink /> : <IconExpand />}
-             </button>
-             <button className="terminal-btn-official-accent" title="重新启动" onClick={() => handleForceRestart()}>
-               <IconRefresh />
-             </button>
+             <button className="terminal-btn-gemini" title="复制内容" onClick={handleCopy}>{isCopied ? <IconCheck /> : <IconCopy />}</button>
+             <button className="terminal-btn-gemini" title="下载日志" onClick={handleDownload}><IconDownload /></button>
+           </div>
+
+           <div className="action-button-group">
+             <button className="terminal-btn-gemini" onClick={() => setIsFocusMode(!isFocusMode)}>{isFocusMode ? <IconShrink /> : <IconExpand />}</button>
+             <button className="terminal-btn-official-accent" onClick={() => handleForceRestart()}><IconRefresh /></button>
            </div>
         </div>
       </div>
@@ -528,29 +492,22 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       <div className="terminal-inner">
         <div ref={terminalRef} className="xterm-container-gemini" />
         
-        {contextMenu && (
-          <div 
-            className="terminal-context-menu glass-effect"
-            style={{ top: contextMenu.y, left: contextMenu.x }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="menu-item" onClick={handleCopy}>
-              <span className="material-symbols-outlined">content_copy</span>
-              复制 (Copy)
-            </div>
-            <div className="menu-item" onClick={handlePaste}>
-              <span className="material-symbols-outlined">content_paste</span>
-              粘贴 (Paste)
-            </div>
-            <div className="menu-divider" />
-            <div className="menu-item" onClick={() => { xtermRef.current?.reset(); setContextMenu(null); }}>
-              <span className="material-symbols-outlined">rebase_edit</span>
-              清除屏幕 (Clear)
-            </div>
+        {selectionPosition && (
+          <div className="terminal-selection-popup glass-effect" style={{ top: selectionPosition.y, left: selectionPosition.x }}>
+            <button onClick={handleCopy}><IconCopy /> 复制</button>
           </div>
         )}
 
-        {isMobile && status === 'connected' && (
+        {contextMenu && (
+          <div className="terminal-context-menu glass-effect" style={{ top: contextMenu.y, left: contextMenu.x }} onClick={(e) => e.stopPropagation()}>
+            <div className="menu-item" onClick={handleCopy}><IconCopy /> 复制 (Copy)</div>
+            <div className="menu-item" onClick={handlePaste}><IconDownload /> 粘贴 (Paste)</div>
+            <div className="menu-divider" />
+            <div className="menu-item" onClick={() => { xtermRef.current?.reset(); setContextMenu(null); }}><IconClear /> 清除屏幕 (Clear)</div>
+          </div>
+        )}
+
+        {isMobile && isHelperVisible && status === 'connected' && (
           <div className="mobile-terminal-helper glass-effect">
             <div className="helper-row">
               <button className={`helper-btn latchable ${ctrlLatched ? 'latched' : ''}`} onClick={() => setCtrlLatched(!ctrlLatched)}>CTRL</button>
@@ -571,7 +528,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
         )}
 
         {hasNewContent && (
-          <button className="scroll-bottom-fab" onClick={scrollToBottom}>
+          <button className="scroll-bottom-fab" onClick={() => xtermRef.current?.scrollToBottom()}>
              <IconArrowDown /> 最新输出
           </button>
         )}
@@ -579,10 +536,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
         {status === 'connecting' && (
            <div className="terminal-overlay-modern">
               <div className="overlay-card-gemini glass-effect">
-                 <div className="gemini-loader-container">
-                    <div className="gemini-loader-ring"></div>
-                    <IconGemini />
-                 </div>
+                 <div className="gemini-loader-container"><div className="gemini-loader-ring"></div><IconGemini /></div>
                  <h3>正在连接执行环境...</h3>
                  <p>正在拉起 Gemini 会话并建立加密隧道。这通常需要几秒钟时间。</p>
               </div>
@@ -592,14 +546,10 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
         {status === 'disconnected' && !systemError && (
            <div className="terminal-overlay-modern">
               <div className="overlay-card-gemini glass-effect">
-                 <div className="gemini-sparkle-container">
-                    <IconGemini />
-                 </div>
+                 <div className="gemini-sparkle-container"><IconGemini /></div>
                  <h3>会话已就绪</h3>
                  <p>执行环境已准备就绪。由于安全策略，请点击下方按钮激活交互式终端会话。</p>
-                 <button className="btn-gemini-glow" onClick={() => connect()}>
-                    <IconRefresh /> 开启交互会话
-                 </button>
+                 <button className="btn-gemini-glow" onClick={() => connect()}><IconRefresh /> 开启交互会话</button>
               </div>
            </div>
         )}
@@ -607,14 +557,10 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
         {systemError && (
            <div className="terminal-overlay-modern">
               <div className="overlay-card-gemini glass-effect error-border">
-                 <div className="gemini-error-icon-container">
-                    <IconInterrupt />
-                 </div>
+                 <div className="gemini-error-icon-container"><IconInterrupt /></div>
                  <h3>执行环境报错</h3>
                  <p className="error-msg-detail">{systemError}</p>
-                 <button className="btn-gemini-glow error-bg" onClick={() => connect()}>
-                    <IconRefresh /> 重试连接
-                 </button>
+                 <button className="btn-gemini-glow error-bg" onClick={() => connect()}><IconRefresh /> 重试连接</button>
               </div>
            </div>
         )}

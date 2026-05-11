@@ -66,37 +66,57 @@ export class SessionManager {
     }
 
     if (useFallback) {
-      // Non-blocking Python PTY Bridge with dual-way I/O multiplexing
+      // Non-blocking Python PTY Bridge with dual-way I/O multiplexing and Resize support
       const pyArgs = isNew ? 
         ['--skip-trust', '--approval-mode', 'yolo', '--prompt-interactive', ' '] : 
         ['--resume', uuid, '--skip-trust', '--approval-mode', 'yolo', '--prompt-interactive', ' '];
       
       const pyScript = `
-import pty, os, sys, select, termios, struct, fcntl
+import pty, os, sys, select, termios, struct, fcntl, signal
 
-def set_size(fd, rows, cols):
-    size = struct.pack("HHHH", rows, cols, 0, 0)
-    fcntl.ioctl(fd, termios.TIOCSWINSZ, size)
+size_file = "/tmp/gemini-term-size-${uuid}.tmp"
+
+def set_size(fd):
+    try:
+        if os.path.exists(size_file):
+            with open(size_file, 'r') as f:
+                content = f.read().strip()
+                if content:
+                    rows, cols = map(int, content.split(','))
+                    size = struct.pack("HHHH", rows, cols, 0, 0)
+                    fcntl.ioctl(fd, termios.TIOCSWINSZ, size)
+    except Exception: pass
 
 def bridge():
     pid, fd = pty.fork()
     if pid == 0:
         os.execv(r'${geminiPath}', [r'${geminiPath}'] + ${JSON.stringify(pyArgs)})
     else:
-        set_size(fd, ${rows}, ${cols})
+        # Initial size
+        with open(size_file, 'w') as f: f.write(f"${rows},${cols}")
+        set_size(fd)
+        
+        # Signal handler for SIGUSR1 (triggered by Node)
+        def handle_resize(signum, frame):
+            set_size(fd)
+        signal.signal(signal.SIGUSR1, handle_resize)
+
         try:
             while True:
-                # Multiplex between PTY and Stdin
+                # Use a larger buffer (16KB) for high-speed output
                 r, w, e = select.select([fd, sys.stdin], [], [])
                 if fd in r:
-                    data = os.read(fd, 1024)
+                    data = os.read(fd, 16384)
                     if not data: break
                     os.write(sys.stdout.fileno(), data)
                     sys.stdout.flush()
                 if sys.stdin in r:
-                    data = os.read(sys.stdin.fileno(), 1024)
+                    # Non-blocking read from stdin
+                    data = os.read(sys.stdin.fileno(), 4096)
                     if data: os.write(fd, data)
         except (EOFError, OSError): pass
+        finally:
+            if os.path.exists(size_file): os.remove(size_file)
 
 if __name__ == "__main__":
     bridge()
@@ -116,7 +136,6 @@ if __name__ == "__main__":
       cp.stderr?.on('data', (data) => {
         const msg = data.toString();
         console.error(`[SessionManager] Fallback stderr: ${msg}`);
-        // Log all stderr but only show potential user-facing errors
         if (!msg.includes('tcgetattr') && !msg.includes('ioctl')) {
           onDataCb(`\x1b[31m[System Error] ${msg}\x1b[0m`);
         }
@@ -128,14 +147,25 @@ if __name__ == "__main__":
       });
       cp.on('exit', (code, signal) => onExitCb({ exitCode: code ?? 0, signal: signal ? 1 : undefined as any }));
 
+      const sizeFilePath = `/tmp/gemini-term-size-${uuid}.tmp`;
+
       ptyProcess = {
         write: (data: string) => {
           if (cp.stdin?.writable) cp.stdin.write(data);
         },
         kill: () => {
           cp.kill();
+          try { require('fs').unlinkSync(sizeFilePath); } catch (e) {}
         },
-        resize: () => {},
+        resize: (newCols: number, newRows: number) => {
+          try {
+            const fs = require('fs');
+            fs.writeFileSync(sizeFilePath, `${newRows},${newCols}`);
+            cp.kill('SIGUSR1');
+          } catch (e) {
+            console.warn('[SessionManager] Resize failed', e);
+          }
+        },
         onData: (cb: (data: string) => void) => {
           onDataCb = cb;
         },

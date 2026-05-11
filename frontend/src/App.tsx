@@ -130,17 +130,11 @@ function App() {
 
         <div className={`content-area ${isLiveMode ? 'live-mode' : ''}`}>
           {selectedSession ? (
-            <>
-              {isLiveMode ? (
-                <div className="terminal-container">
-                   <Terminal 
-                     uuid={selectedSession.id} 
-                     projectPath={selectedSession.projectPath} 
-                     initialPrompt={initialPrompt}
-                     theme={theme}
-                   />
-                </div>
-              ) : (
+            <div className="content-stack">
+              <div 
+                className="chat-view-layer" 
+                style={{ display: isLiveMode ? 'none' : 'flex' }}
+              >
                 <ChatHistory 
                   transcript={transcript}
                   isLoading={isLoadingTranscript}
@@ -148,8 +142,20 @@ function App() {
                   onLoadMore={loadMore}
                   onStartLive={() => setIsLiveMode(true)}
                 />
-              )}
-            </>
+              </div>
+              
+              <div 
+                className="terminal-view-layer"
+                style={{ display: isLiveMode ? 'flex' : 'none' }}
+              >
+                 <Terminal 
+                   uuid={selectedSession.id} 
+                   projectPath={selectedSession.projectPath} 
+                   initialPrompt={initialPrompt}
+                   theme={theme}
+                 />
+              </div>
+            </div>
           ) : (
             <div className="welcome-screen">
                <div className="welcome-greeting">

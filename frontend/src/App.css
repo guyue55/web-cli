@@ -609,6 +609,41 @@ body, html, #root {
   padding-bottom: 0;
 }
 
+/* --- Layered Content Rendering --- */
+.content-stack {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.chat-view-layer, .terminal-view-layer {
+  flex: 1;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+.terminal-view-layer {
+  /* Reuse the max-width and padding from terminal-container */
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 24px 24px;
+}
+
+@media (max-width: 768px) {
+  .terminal-view-layer {
+    padding: 0 8px 8px;
+  }
+}
+
+/* Fix for Scroll FAB in layered mode */
+.terminal-view-layer .scroll-bottom-fab {
+  bottom: 32px;
+}
+
 .transcript-container {
   width: 100%;
   max-width: var(--content-max-width);
@@ -1400,6 +1435,17 @@ body, html, #root {
   box-shadow: 0 0 8px rgba(155, 114, 203, 0.4);
 }
 
+.helper-btn.latchable {
+  background: rgba(155, 114, 203, 0.1);
+  color: #9b72cb;
+}
+
+.helper-btn.latched {
+  background: #9b72cb;
+  color: white;
+  box-shadow: 0 0 8px rgba(155, 114, 203, 0.4);
+}
+
 .helper-btn:active {
   background: var(--accent-blue);
   color: white;
@@ -1415,6 +1461,98 @@ body, html, #root {
 
 .dark .helper-divider {
   background: rgba(255,255,255,0.1);
+}
+
+/* Command Library */
+.command-library-container {
+  position: relative;
+}
+
+.command-library-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  width: 240px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 18px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+  padding: 8px;
+  z-index: 500;
+  animation: slideInDown 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dark .command-library-dropdown {
+  background: rgba(30, 31, 32, 0.85);
+}
+
+.dropdown-header {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.dropdown-item {
+  padding: 10px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transition: all 0.2s;
+}
+
+.dropdown-item:hover {
+  background-color: var(--bg-hover);
+  transform: translateX(4px);
+}
+
+.q-cmd {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-blue);
+}
+
+.q-label {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* Selection Popup */
+.terminal-selection-popup {
+  position: fixed;
+  z-index: 2500;
+  background: var(--accent-blue);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 20px;
+  box-shadow: 0 4px 15px rgba(66, 133, 244, 0.4);
+  transform: translateX(-50%);
+  animation: fadeIn 0.15s ease-out;
+}
+
+.terminal-selection-popup button {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@keyframes slideInDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .terminal-inner {
@@ -1445,19 +1583,63 @@ body, html, #root {
 
 /* Custom XTerm Scrollbar */
 .terminal-inner .xterm-viewport::-webkit-scrollbar {
-  width: 6px;
+  width: 5px;
 }
 
 .terminal-inner .xterm-viewport::-webkit-scrollbar-thumb {
-  background: rgba(128, 128, 128, 0.2);
+  background: rgba(128, 128, 128, 0.15);
   border-radius: 10px;
 }
 
 .terminal-inner .xterm-viewport::-webkit-scrollbar-thumb:hover {
-  background: rgba(128, 128, 128, 0.4);
+  background: rgba(66, 133, 244, 0.3);
 }
 
-.terminal-search-bar {
+.xterm-rows {
+  font-variant-ligatures: normal;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+.terminal-toolbar.premium-header {
+  border-top-left-radius: 28px;
+  border-top-right-radius: 28px;
+}
+
+/* Redesign Command Library Dropdown */
+.command-library-dropdown {
+  width: 320px;
+  padding: 12px;
+  border-radius: 24px;
+}
+
+.dropdown-item {
+  padding: 12px 16px;
+  gap: 4px;
+}
+
+.dropdown-item .q-cmd {
+  color: var(--accent-blue);
+  font-size: 14px;
+}
+
+.dropdown-item .q-label {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+/* Improved Context Menu */
+.terminal-context-menu {
+  padding: 8px;
+  border-radius: 16px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.2);
+}
+
+.menu-item {
+  padding: 10px 14px;
+}
+
+.terminal-container {
   display: flex;
   align-items: center;
   gap: 4px;
