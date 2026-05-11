@@ -689,6 +689,10 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     }, 100);
 
     term.onData(data => {
+      // 2026 Resilience: Suppress Device Attributes (DA) ghost responses (e.g. \x1b[?1;2c)
+      // These are often triggered by shell probes on connect/refresh.
+      if (data.startsWith('\x1b[?')) return;
+
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({ type: 'input', data }));
       }
