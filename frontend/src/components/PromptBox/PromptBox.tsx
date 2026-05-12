@@ -35,8 +35,10 @@ export const PromptBox: React.FC<PromptBoxProps> = ({ onSubmit }) => {
 
   useEffect(() => {
     if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
+      // Reset height to allow shrinking
+      textareaRef.current.style.height = '24px';
       const scrollHeight = textareaRef.current.scrollHeight;
+      // Set to scrollHeight but capped at 200px
       textareaRef.current.style.height = `${Math.min(scrollHeight, 200)}px`;
     }
   }, [text]);
@@ -63,7 +65,7 @@ export const PromptBox: React.FC<PromptBoxProps> = ({ onSubmit }) => {
         </div>
       )}
       
-      <div className="prompt-container">
+      <div className="prompt-container" onClick={() => textareaRef.current?.focus()}>
         <button className="icon-btn-plain" title="添加文件">
           <IconPlus />
         </button>

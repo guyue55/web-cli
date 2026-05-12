@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   IconGemini, IconInterrupt, IconClear, 
-  IconRefresh, IconExpand, IconShrink, IconArrowDown 
+  IconRefresh, IconExpand, IconShrink, IconArrowDown, IconArrowUp
 } from './TerminalIcons';
 
 export const TerminalHeader = React.memo(({ 
@@ -41,13 +41,14 @@ export const TerminalHeader = React.memo(({
   onRestart: () => void,
   onInterrupt: () => void,
   onClear: () => void,
-  onSearch: (q: string, dir?: 'next' | 'prev') => void
+  onSearch: (q: string, dir?: 'next' | 'prev', incremental?: boolean) => void
 }) => {
   const [isPulseActive, setIsPulseActive] = useState(false);
   const [errorPerceived, setErrorPerceived] = useState(false);
 
   useEffect(() => {
     if (!ws) return;
+    let pulseTimer: ReturnType<typeof setTimeout>;
     const onMessage = (event: MessageEvent) => {
       try {
         const payload = JSON.parse(event.data);
@@ -57,13 +58,16 @@ export const TerminalHeader = React.memo(({
             setErrorPerceived(true);
           }
           setIsPulseActive(true);
-          const t = setTimeout(() => setIsPulseActive(false), 200);
-          return () => clearTimeout(t);
+          if (pulseTimer) clearTimeout(pulseTimer);
+          pulseTimer = setTimeout(() => setIsPulseActive(false), 200);
         }
       } catch { /* ignore */ }
     };
     ws.addEventListener('message', onMessage);
-    return () => ws.removeEventListener('message', onMessage);
+    return () => {
+      ws.removeEventListener('message', onMessage);
+      if (pulseTimer) clearTimeout(pulseTimer);
+    };
   }, [ws]);
 
   return (
@@ -84,8 +88,8 @@ export const TerminalHeader = React.memo(({
       <div className="toolbar-actions-group">
          <div className="action-button-group">
            <button 
-             className={`terminal-btn-gemini ai-highlight ${errorPerceived ? 'error-perceived' : ''}`} 
-             title={errorPerceived ? "检测到错误，交给 AI 解释" : "AI 解释当前内容"} 
+             className={`terminal-btn-gemini premium-ai-btn ${errorPerceived ? 'error-pulse' : ''}`} 
+             title={errorPerceived ? "发现潜在错误，交给 Gemini 分析" : "分析当前上下文"} 
              onClick={(e) => { e.stopPropagation(); onExplain(); setErrorPerceived(false); }}
            >
              <span className="material-symbols-outlined">auto_awesome</span>
@@ -106,20 +110,26 @@ export const TerminalHeader = React.memo(({
                type="text" 
                placeholder="搜索内容..." 
                autoFocus
-               onChange={(e) => onSearch(e.target.value)}
+               value={searchQuery}
+               onChange={(e) => onSearch(e.target.value, 'next', true)}
                onKeyDown={(e) => {
-                 if (e.key === 'Enter') onSearch((e.target as HTMLInputElement).value);
+                 if (e.key === 'Enter') {
+                    if (e.shiftKey) onSearch(searchQuery, 'prev', false);
+                    else onSearch(searchQuery, 'next', false);
+                 }
                  if (e.key === 'Escape') onToggleSearch();
                }}
              />
-             <div className="search-count">{searchMatches.total > 0 ? `${searchMatches.current}/${searchMatches.total}` : '0/0'}</div>
-             <button onClick={() => onSearch(searchQuery, 'prev')}><IconArrowDown /></button>
-             <button onClick={onToggleSearch}><IconInterrupt /></button>
+             <div className="search-count">{searchMatches.total > 0 ? '匹配' : '无结果'}</div>
+             <div className="search-nav-btns">
+               <button onClick={() => onSearch(searchQuery, 'prev', false)} title="上一个 (Shift+Enter)"><IconArrowUp /></button>
+               <button onClick={() => onSearch(searchQuery, 'next', false)} title="下一个 (Enter)"><IconArrowDown /></button>
+             </div>
+             <button className="search-close-btn" onClick={onToggleSearch} title="关闭 (Esc)"><IconInterrupt /></button>
            </div>
          )}
 
          <div className="action-button-group">
-           <button className={`terminal-btn-gemini ${isSearchVisible ? 'active' : ''}`} title="查找 (Ctrl+F)" onClick={onToggleSearch}><span className="material-symbols-outlined">search</span></button>
            <button className="terminal-btn-gemini" title="中断 (Ctrl+C)" onClick={onInterrupt}><IconInterrupt /></button>
            <button className="terminal-btn-gemini" title="重置终端" onClick={onClear}><IconClear /></button>
          </div>

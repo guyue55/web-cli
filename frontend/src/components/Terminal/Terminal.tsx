@@ -21,6 +21,15 @@ import type { TerminalProps } from '@web-cli/shared';
 // eslint-disable-next-line no-control-regex
 const stripAnsi = (str: string) => str.replace(/[\u001b\u009b][[()#;?]*(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d/#&.:=?%@~]*)*)?\u0007/g, '');
 
+const QUICK_COMMANDS = [
+  { cmd: '/help', label: '获取指令帮助', icon: 'help' },
+  { cmd: '/memory show', label: '查看项目记忆', icon: 'neurology' },
+  { cmd: '/skills list', label: '列出代理技能', icon: 'bolt' },
+  { cmd: 'git status -sb', label: 'Git 简报', icon: 'account_tree' },
+  { cmd: 'npm run dev', label: '启动开发服务器', icon: 'terminal' },
+  { cmd: '/reset', label: '重置当前会话', icon: 'refresh' },
+];
+
 const Terminal: React.FC<TerminalProps> = React.memo(({ uuid, projectPath, initialPrompt, theme, onSendToChat }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -33,6 +42,7 @@ const Terminal: React.FC<TerminalProps> = React.memo(({ uuid, projectPath, initi
   const [wsInstance, setWsInstance] = useState<WebSocket | null>(null);
   const [systemError, setSystemError] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
+  const [pasteError, setPasteError] = useState<string | null>(null);
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [hasNewContent, setHasNewContent] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -130,15 +140,6 @@ const Terminal: React.FC<TerminalProps> = React.memo(({ uuid, projectPath, initi
     triggerHaptic();
   };
 
-  const QUICK_COMMANDS = [
-    { cmd: '/help', label: '获取指令帮助', icon: 'help' },
-    { cmd: '/memory show', label: '查看项目记忆', icon: 'neurology' },
-    { cmd: '/skills list', label: '列出代理技能', icon: 'bolt' },
-    { cmd: 'git status -sb', label: 'Git 简报', icon: 'account_tree' },
-    { cmd: 'npm run dev', label: '启动开发服务器', icon: 'terminal' },
-    { cmd: '/reset', label: '重置当前会话', icon: 'refresh' },
-  ];
-
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth <= 768 || /Android|iPhone/i.test(navigator.userAgent));
@@ -210,14 +211,17 @@ const Terminal: React.FC<TerminalProps> = React.memo(({ uuid, projectPath, initi
     }
   }, [triggerHaptic]);
 
-  const handlePaste = useCallback(async () => {
+  const handlePaste = useCallback(async (silent = false) => {
     try {
       // Industrial-grade check: Clipboard API requires HTTPS or localhost
-      if (!navigator.clipboard || !navigator.clipboard.readText) {
+      if (!navigator.clipboard || typeof navigator.clipboard.readText !== 'function') {
+        if (silent) return; // Suppress alert in silent mode (e.g. middle click)
         const reason = !window.isSecureContext 
-          ? '浏览器安全策略限制：非 HTTPS 环境无法通过菜单粘贴。请使用 Ctrl+V 或切换至 HTTPS/Localhost。' 
-          : '您的浏览器可能禁用了剪贴板访问。请在地址栏权限设置中允许“剪贴板”访问。';
-        throw new Error(reason);
+          ? '浏览器安全策略限制：非 HTTPS 环境无法通过菜单粘贴。请使用 Ctrl+V。' 
+          : '浏览器可能禁用了剪贴板访问。请在权限设置中开启。';
+        setPasteError(reason);
+        setTimeout(() => setPasteError(null), 4000);
+        return;
       }
       
       const text = await navigator.clipboard.readText();
@@ -225,13 +229,15 @@ const Terminal: React.FC<TerminalProps> = React.memo(({ uuid, projectPath, initi
         wsRef.current.send(JSON.stringify({ type: 'input', data: text }));
       }
     } catch (err: unknown) {
+      if (silent) return; // Suppress alert in silent mode
       console.error('Terminal Paste Error:', err);
       const error = err as Error;
+      let msg = '粘贴失败，请检查浏览器权限。';
       if (error.name === 'NotAllowedError') {
-        alert('无法访问剪贴板。请在浏览器权限设置中允许“剪贴板”读取，或直接使用键盘快捷键 Ctrl+V / Cmd+V。');
-      } else {
-        alert(error.message || '粘贴失败，请检查浏览器权限。');
+        msg = '无法访问剪贴板。请在权限设置中允许读取，或使用 Ctrl+V。';
       }
+      setPasteError(msg);
+      setTimeout(() => setPasteError(null), 4000);
     } finally {
       setContextMenu(null);
       triggerHaptic();
@@ -253,16 +259,21 @@ const Terminal: React.FC<TerminalProps> = React.memo(({ uuid, projectPath, initi
     triggerHaptic();
   }, [triggerHaptic]);
 
-  const handleSearch = useCallback((query: string, direction: 'next' | 'prev' = 'next') => {
+  const handleSearch = useCallback((query: string, direction: 'next' | 'prev' = 'next', isIncremental = false) => {
     if (!query) {
       setSearchMatches({ current: 0, total: 0 });
+      setSearchQuery('');
       return;
     }
     setSearchQuery(query);
     if (searchAddonRef.current) {
-      if (direction === 'next') searchAddonRef.current.findNext(query, { incremental: true });
-      else searchAddonRef.current.findPrevious(query);
-      setSearchMatches({ current: 1, total: 1 });
+      const found = direction === 'next' 
+        ? searchAddonRef.current.findNext(query, { incremental: isIncremental })
+        : searchAddonRef.current.findPrevious(query, { incremental: isIncremental });
+      
+      // Since standard search addon doesn't provide counts, 
+      // we at least show if something was found.
+      setSearchMatches({ current: found ? 1 : 0, total: found ? 1 : 0 });
     }
   }, []);
 
@@ -280,20 +291,44 @@ const Terminal: React.FC<TerminalProps> = React.memo(({ uuid, projectPath, initi
   const explainWithGemini = useCallback((customText?: string) => {
     if (!onSendToChat) return;
     let textToExplain = customText;
+    let contextType = 'selection';
+
     if (!textToExplain && xtermRef.current) {
-      textToExplain = xtermRef.current.getSelection();
+      const term = xtermRef.current;
+      textToExplain = term.getSelection();
+      
       if (!textToExplain) {
-        const term = xtermRef.current;
-        const totalLines = term.buffer.active.length;
+        contextType = 'smart_block';
+        const buffer = term.buffer.active;
+        const totalLines = buffer.length;
+        let startLine = Math.max(0, totalLines - 60); // Scan last 60 lines
+        
+        // Smart Scan: Find the last prompt ($ or # or >) to define the execution block
+        for (let i = totalLines - 1; i >= startLine; i--) {
+          const line = buffer.getLine(i)?.translateToString() || '';
+          if (line.match(/[$#>] /)) {
+            startLine = i;
+            break;
+          }
+        }
+
         textToExplain = '';
-        for (let i = Math.max(0, totalLines - 40); i < totalLines; i++) {
-          const line = term.buffer.active.getLine(i);
+        for (let i = startLine; i < totalLines; i++) {
+          const line = buffer.getLine(i);
           if (line) textToExplain += line.translateToString() + '\n';
         }
       }
     }
+
     if (textToExplain) {
-      onSendToChat(`请帮我分析这段终端输出。如果是报错，请解释原因并给出修复建议：\n\n\`\`\`\n${stripAnsi(textToExplain)}\n\`\`\``);
+      const cleanText = stripAnsi(textToExplain);
+      let prompt = `请帮我分析这段终端输出。如果是报错，请解释原因并给出修复建议：\n\n\`\`\`\n${cleanText}\n\`\`\``;
+      
+      if (contextType === 'smart_block') {
+        prompt = `我正在执行以下命令并遇到了问题，请分析该执行过程并给出建议：\n\n\`\`\`\n${cleanText}\n\`\`\``;
+      }
+
+      onSendToChat(prompt);
       setContextMenu(null);
       setSelectionPosition(null);
       triggerHaptic();
@@ -599,9 +634,29 @@ const Terminal: React.FC<TerminalProps> = React.memo(({ uuid, projectPath, initi
           handleClearRef.current();
           return false; 
         }
+        // Explicit Paste Support: Handle Ctrl+V / Cmd+V
+        if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+          handlePasteRef.current();
+          return false;
+        }
       }
       return true;
     });
+
+    const handleMouseDown = (e: MouseEvent) => {
+      // Middle Click Paste Support (Button 1 is middle button)
+      if (e.button === 1) {
+        // Programmatic paste only works in secure contexts
+        if (window.isSecureContext && navigator.clipboard && typeof navigator.clipboard.readText === 'function') {
+          e.preventDefault();
+          handlePasteRef.current(true); // Silent mode
+        } else {
+          // In HTTP, we can't read clipboard. Don't prevent default, 
+          // maybe the browser can handle it natively (e.g. Linux selection)
+          console.warn('[Terminal] Middle-click paste skipped programmatic execution due to non-secure context.');
+        }
+      }
+    };
 
     term.onBell(() => {
       setVisualBell(true);
@@ -657,6 +712,7 @@ const Terminal: React.FC<TerminalProps> = React.memo(({ uuid, projectPath, initi
       }
     };
 
+    termNode.addEventListener('mousedown', handleMouseDown);
     termNode.addEventListener('click', handleContainerClick);
     termNode.addEventListener('contextmenu', handleContextMenu);
     termNode.addEventListener('mouseup', handleMouseUp);
@@ -667,6 +723,7 @@ const Terminal: React.FC<TerminalProps> = React.memo(({ uuid, projectPath, initi
     return () => {
       resizeObserver.disconnect();
       observer.disconnect();
+      termNode.removeEventListener('mousedown', handleMouseDown);
       termNode.removeEventListener('click', handleContainerClick);
       termNode.removeEventListener('contextmenu', handleContextMenu);
       termNode.removeEventListener('mouseup', handleMouseUp);
@@ -684,7 +741,7 @@ const Terminal: React.FC<TerminalProps> = React.memo(({ uuid, projectPath, initi
     const now = Date.now();
     if (now - lastTapRef.current < 300) {
       e.preventDefault();
-      handlePaste();
+      handlePaste(true); // Silent mode for mobile tap
     }
     lastTapRef.current = now;
   }, [handlePaste]);
@@ -741,6 +798,53 @@ const Terminal: React.FC<TerminalProps> = React.memo(({ uuid, projectPath, initi
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  const [paletteSearch, setPaletteSearch] = useState('');
+  const [paletteIndex, setPaletteIndex] = useState(0);
+
+  const getFilteredPaletteItems = useCallback(() => {
+    const items = [
+      ...commandHistory.map(h => ({ cmd: h, label: h, type: 'history', icon: 'history' })),
+      ...QUICK_COMMANDS.map(q => ({ ...q, type: 'action' }))
+    ];
+    if (!paletteSearch) return items;
+    const search = paletteSearch.toLowerCase();
+    return items.filter(item => 
+      item.cmd.toLowerCase().includes(search) || 
+      item.label.toLowerCase().includes(search)
+    );
+  }, [commandHistory, paletteSearch]);
+
+  const onTogglePalette = useCallback(() => {
+    setIsPaletteOpen(prev => {
+      if (!prev) {
+        setPaletteSearch('');
+        setPaletteIndex(0);
+      }
+      return !prev;
+    });
+  }, []);
+
+  const handlePaletteKeyDown = (e: React.KeyboardEvent) => {
+    const items = getFilteredPaletteItems();
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setPaletteIndex(i => (i + 1) % Math.max(1, items.length));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setPaletteIndex(i => (i - 1 + items.length) % Math.max(1, items.length));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const selected = items[paletteIndex];
+      if (selected) runCommand(selected.cmd);
+    } else if (e.key === 'Escape') {
+      setIsPaletteOpen(false);
+    }
+  };
+
+  const onToggleSearch = useCallback(() => setIsSearchVisible(prev => !prev), []);
+  const onToggleFocus = useCallback(() => setIsFocusMode(prev => !prev), []);
+  const onToggleHelper = useCallback(() => setIsHelperVisible(prev => !prev), []);
 
   return (
     <div 
@@ -802,10 +906,10 @@ const Terminal: React.FC<TerminalProps> = React.memo(({ uuid, projectPath, initi
         searchQuery={searchQuery}
         searchMatches={searchMatches}
         onExplain={(text) => explainWithGemini(text)}
-        onTogglePalette={() => setIsPaletteOpen(!isPaletteOpen)}
-        onToggleSearch={() => setIsSearchVisible(!isSearchVisible)}
-        onToggleFocus={() => setIsFocusMode(!isFocusMode)}
-        onToggleHelper={() => setIsHelperVisible(!isHelperVisible)}
+        onTogglePalette={onTogglePalette}
+        onToggleSearch={onToggleSearch}
+        onToggleFocus={onToggleFocus}
+        onToggleHelper={onToggleHelper}
         onRestart={handleForceRestart}
         onInterrupt={() => sendKey('\x03')}
         onClear={handleClear}
@@ -817,40 +921,43 @@ const Terminal: React.FC<TerminalProps> = React.memo(({ uuid, projectPath, initi
       </div>
       
       {isPaletteOpen && createPortal(
-          <div className="terminal-command-palette glass-effect" style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 9999 }} onClick={(e) => e.stopPropagation()}>
+          <div className="terminal-command-palette glass-premium" style={{ position: 'fixed', top: '15%', left: '50%', transform: 'translateX(-50%)', zIndex: 9999 }} onClick={(e) => e.stopPropagation()}>
             <div className="palette-search-wrapper">
-              <span className="material-symbols-outlined">search</span>
+              <span className="material-symbols-outlined" style={{ color: '#9b72cb' }}>sparkles</span>
               <input 
                 type="text" 
-                placeholder="搜索指令或历史..." 
+                placeholder="键入指令或检索最近记录..." 
                 autoFocus
-                onChange={(e) => handleSearch(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') runCommand((e.target as HTMLInputElement).value);
-                  if (e.key === 'Escape') setIsPaletteOpen(false);
-                }}
+                value={paletteSearch}
+                onChange={(e) => { setPaletteSearch(e.target.value); setPaletteIndex(0); }}
+                onKeyDown={handlePaletteKeyDown}
               />
-              <span className="palette-hint">ESC 退出</span>
+              <span className="palette-hint">ENTER 执行 · ESC 退出</span>
             </div>
             <div className="palette-results">
-              {commandHistory.length > 0 && (
-                <>
-                  <div className="palette-section-header">最近指令</div>
-                  {commandHistory.map(h => (
-                    <div key={h} className="palette-item history-item" onClick={() => runCommand(h)}>
-                      <span className="material-symbols-outlined item-icon">history</span>
-                      <div className="item-text"><span className="item-label">{h}</span></div>
-                    </div>
-                  ))}
-                </>
-              )}
-              <div className="palette-section-header">常用操作</div>
-              {QUICK_COMMANDS.map(q => (
-                <div key={q.cmd} className="palette-item" onClick={() => runCommand(q.cmd)}>
-                  <span className="material-symbols-outlined item-icon">{q.icon}</span>
-                  <div className="item-text"><span className="item-label">{q.label}</span><span className="item-cmd">{q.cmd}</span></div>
+              {getFilteredPaletteItems().map((item, idx) => (
+                <div 
+                  key={`${item.type}-${item.cmd}-${idx}`} 
+                  className={`palette-item ${idx === paletteIndex ? 'active' : ''}`} 
+                  onClick={() => runCommand(item.cmd)}
+                  onMouseEnter={() => setPaletteIndex(idx)}
+                >
+                  <span className="material-symbols-outlined item-icon">
+                    {item.type === 'history' ? 'history' : item.icon}
+                  </span>
+                  <div className="item-text">
+                    <span className="item-label">{item.label}</span>
+                    {item.type === 'action' && <span className="item-cmd">{item.cmd}</span>}
+                  </div>
+                  {idx === paletteIndex && <span className="active-indicator" style={{ fontSize: '14px', fontWeight: '800' }}>GO</span>}
                 </div>
               ))}
+              {getFilteredPaletteItems().length === 0 && (
+                <div className="palette-no-results">
+                  <span className="material-symbols-outlined" style={{ fontSize: '32px', marginBottom: '8px', opacity: 0.5 }}>search_off</span>
+                  <p>未找到匹配指令</p>
+                </div>
+              )}
             </div>
           </div>,
           document.body
@@ -860,10 +967,6 @@ const Terminal: React.FC<TerminalProps> = React.memo(({ uuid, projectPath, initi
           <div className="terminal-selection-popup glass-effect" style={{ position: 'fixed', top: selectionPosition.y, left: selectionPosition.x, zIndex: 9999 }}>
             <button onClick={handleCopy}>
               <IconCopy /> 复制
-            </button>
-            <div className="popup-divider" />
-            <button onClick={() => { handleSearch(xtermRef.current?.getSelection() || ''); setSelectionPosition(null); }} className="ai-btn-small">
-               <span className="material-symbols-outlined">search</span> 查找
             </button>
             <div className="popup-divider" />
             <button onClick={() => explainWithGemini()} className="ai-btn-small">
@@ -877,6 +980,14 @@ const Terminal: React.FC<TerminalProps> = React.memo(({ uuid, projectPath, initi
           <div className="gemini-copy-toast glass-effect">
             <span className="material-symbols-outlined">check_circle</span>
             已复制
+          </div>,
+          document.body
+        )}
+
+        {pasteError && createPortal(
+          <div className="gemini-copy-toast glass-effect error-toast">
+            <span className="material-symbols-outlined">report</span>
+            {pasteError}
           </div>,
           document.body
         )}
@@ -905,7 +1016,7 @@ const Terminal: React.FC<TerminalProps> = React.memo(({ uuid, projectPath, initi
             </div>
             <div className="menu-divider" />
             <div className="menu-item" onClick={handleCopy}><IconCopy /> 复制 (Copy) <span className="menu-shortcut">Cmd+C</span></div>
-            <div className="menu-item" onClick={handlePaste}><span className="material-symbols-outlined">content_paste</span> 粘贴 (Paste) <span className="menu-shortcut">Cmd+V</span></div>
+            <div className="menu-item" onClick={() => handlePaste()}><span className="material-symbols-outlined">content_paste</span> 粘贴 (Paste) <span className="menu-shortcut">Cmd+V</span></div>
             <div className="menu-divider" />
             <div className="menu-item" onClick={handleDownload}><IconDownload /> 下载完整日志</div>
             <div className="menu-item" onClick={handleClear}><IconClear /> 清除屏幕 (Clear)</div>

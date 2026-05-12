@@ -1,0 +1,78 @@
+<svg width="800" height="1000" viewBox="0 0 800 1000" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="800" height="1000" fill="#030712"/>
+  <defs>
+    <radialGradient id="grad1" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+      <stop offset="0%" style="stop-color:#1e1b4b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#030712;stop-opacity:1" />
+    </radialGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="15" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  <rect width="800" height="1000" fill="url(#grad1)" fill-opacity="0.6"/>
+
+  <!-- Logo (Adapted from favicon.svg) -->
+  <g transform="translate(360, 100) scale(1.8)">
+    <path fill="#863bff" d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0-3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z" filter="url(#glow)"/>
+  </g>
+
+  <!-- Title -->
+  <text x="400" y="280" font-family="Inter, system-ui, sans-serif" font-size="64" font-weight="900" fill="white" text-anchor="middle" letter-spacing="-0.02em">Gemini Web</text>
+  <text x="400" y="340" font-family="Inter, system-ui, sans-serif" font-size="24" font-weight="500" fill="#94a3b8" text-anchor="middle">Powerful CLI. Accessible Anywhere.</text>
+
+  <!-- Terminal Window Mockup -->
+  <g transform="translate(100, 420)">
+    <rect width="600" height="350" rx="12" fill="#1e293b" fill-opacity="0.8" stroke="#334155" stroke-width="1"/>
+    <rect width="600" height="32" rx="12" fill="#334155"/>
+    <circle cx="20" cy="16" r="5" fill="#ef4444"/>
+    <circle cx="40" cy="16" r="5" fill="#f59e0b"/>
+    <circle cx="60" cy="16" r="5" fill="#10b981"/>
+    
+    <text x="20" y="70" font-family="JetBrains Mono, monospace" font-size="16" fill="#10b981">$ gemini chat</text>
+    <text x="20" y="100" font-family="JetBrains Mono, monospace" font-size="16" fill="#f8fafc">Initializing Gemini CLI Web...</text>
+    <text x="20" y="130" font-family="JetBrains Mono, monospace" font-size="16" fill="#f8fafc">Session "main" restored (node-pty)</text>
+    <text x="20" y="170" font-family="JetBrains Mono, monospace" font-size="16" fill="#38bdf8">> How can I help you today?</text>
+    
+    <rect x="20" y="190" width="400" height="2" fill="#38bdf8" fill-opacity="0.5">
+      <animate attributeName="width" from="0" to="400" dur="2s" fill="freeze" />
+    </rect>
+  </g>
+
+  <!-- Features Grid -->
+  <g transform="translate(100, 820)">
+    <!-- Feature 1 -->
+    <g transform="translate(0, 0)">
+      <circle cx="20" cy="20" r="20" fill="#863bff" fill-opacity="0.2"/>
+      <path d="M15 20l3 3 7-7" stroke="#863bff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="50" y="18" font-family="Inter" font-size="18" font-weight="600" fill="white">Persistent Sessions</text>
+      <text x="50" y="38" font-family="Inter" font-size="14" fill="#94a3b8">Runs in background with node-pty</text>
+    </g>
+    <!-- Feature 2 -->
+    <g transform="translate(300, 0)">
+      <circle cx="20" cy="20" r="20" fill="#06b6d4" fill-opacity="0.2"/>
+      <path d="M10 20h20M25 15l5 5-5 5" stroke="#06b6d4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="50" y="18" font-family="Inter" font-size="18" font-weight="600" fill="white">Mobile Ready</text>
+      <text x="50" y="38" font-family="Inter" font-size="14" fill="#94a3b8">Responsive UI for Tablet/Phone</text>
+    </g>
+    <!-- Feature 3 -->
+    <g transform="translate(0, 80)">
+      <circle cx="20" cy="20" r="20" fill="#10b981" fill-opacity="0.2"/>
+      <path d="M12 12h16v16h-16zM12 20h16M20 12v16" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="50" y="18" font-family="Inter" font-size="18" font-weight="600" fill="white">File Manager</text>
+      <text x="50" y="38" font-family="Inter" font-size="14" fill="#94a3b8">Browse workspace files directly</text>
+    </g>
+    <!-- Feature 4 -->
+    <g transform="translate(300, 80)">
+      <circle cx="20" cy="20" r="20" fill="#f59e0b" fill-opacity="0.2"/>
+      <path d="M12 20s2-4 8-4 8 4 8 4-2 4-8 4-8-4-8-4z" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="50" y="18" font-family="Inter" font-size="18" font-weight="600" fill="white">Auto-Reconnect</text>
+      <text x="50" y="38" font-family="Inter" font-size="14" fill="#94a3b8">Never lose your terminal state</text>
+    </g>
+  </g>
+
+  <!-- Footer -->
+  <line x1="100" y1="940" x2="700" y2="940" stroke="#334155" stroke-width="1"/>
+  <text x="400" y="975" font-family="Inter" font-size="14" fill="#64748b" text-anchor="middle">Built with Node.js, React, and Gemini CLI. Open Source on GitHub.</text>
+</svg>
