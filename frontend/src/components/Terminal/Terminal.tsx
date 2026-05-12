@@ -107,7 +107,7 @@ const Terminal: React.FC<TerminalProps> = React.memo(({ uuid, projectPath, initi
   }, []);
 
   const addTab = () => {
-    const newId = `${uuid}-tab-${tabs.length}`;
+    const newId = `new-tab-${Date.now()}-${tabs.length}`;
     const newTabs = [...tabs, { id: newId, label: `会话 ${tabs.length + 1}`, color: 'blue' }];
     setTabs(newTabs);
     setActiveTabId(newId);
