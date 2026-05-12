@@ -56,4 +56,11 @@ export interface TerminalProps {
     theme?: string;
     onSendToChat?: (text: string) => void;
 }
+export interface ISession {
+    id: string;
+    projectPath: string;
+    pty: IPtyProcess;
+    buffer: string;
+    clients: Set<any>;
+}
 //# sourceMappingURL=index.d.ts.map

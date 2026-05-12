@@ -68,17 +68,38 @@ export class PTYFactory {
 
       proc.stderr?.on('data', (data: any) => {
         const msg = data.toString();
+        // Skip environment detection for tier switching
         if (discoveryStep === 1 && (msg.includes('pyenv: version') || msg.includes('command not found'))) {
-           console.warn(`[PTYFactory] Tier 1 environment check failed. Silently switching to Tier 2...`);
+           console.warn(`[PTYFactory] Tier 1 environment check failed (pyenv issue). Silently switching to Tier 2...`);
            discoveryStep = 2;
            proc.kill();
+           // Tier 2: Force use system python to bypass local pyenv/conda conflicts
            activeCp = startBridge('/usr/bin/python3');
            return;
         }
 
         if (proc === activeCp) {
-          if (!msg.includes('tcgetattr') && !msg.includes('ioctl')) {
-            onDataCb(`\x1b[31m[System Error] ${msg}\x1b[0m`);
+          // 2026 Resilience: Filter common non-critical stderr messages
+          const isWarning = msg.includes('tcgetattr') || 
+                            msg.includes('ioctl') || 
+                            msg.includes('tput') ||
+                            msg.includes('pyenv: version') ||
+                            msg.includes('bash: no job control');
+          
+          if (!isWarning) {
+            // Only report to frontend if it looks like a CRITICAL bridge failure
+            // Regular application stderr should already be handled by the PTY fd.
+            // Bridge errors usually start with "Fork failed", "Exec failed", etc.
+            const isFatal = msg.includes('Fork failed') || 
+                            msg.includes('Exec failed') || 
+                            msg.includes('Stdin read error') ||
+                            (discoveryStep === 2 && msg.toLowerCase().includes('critical error'));
+
+            if (isFatal) {
+               onDataCb(`\x1b[31m[System Error] ${msg}\x1b[0m`);
+            } else {
+               console.log(`[PTYFactory] Bridge stderr (info): ${msg}`);
+            }
           }
         }
       });

@@ -1,35 +1,73 @@
 import React from 'react';
 
 interface WelcomeScreenProps {
-  onHandlePromptSubmit: (text: string) => void;
+  onHandlePromptSubmit: (cmd: string) => void;
 }
 
 export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onHandlePromptSubmit }) => {
+  const actions = [
+    {
+      title: '开始新会话',
+      desc: '创建一个全新的 Gemini 交互式执行环境',
+      cmd: '/new',
+      icon: 'add_circle'
+    },
+    {
+      title: '获取帮助',
+      desc: '查看所有可用的指令和功能说明',
+      cmd: '/help',
+      icon: 'help_center'
+    },
+    {
+      title: '查看记忆',
+      desc: '查看 Gemini 对当前项目的理解和记忆',
+      cmd: '/memory show',
+      icon: 'neurology'
+    },
+    {
+      title: '技能列表',
+      desc: '列出所有可用的代理技能和工具',
+      cmd: '/skills list',
+      icon: 'bolt'
+    }
+  ];
+
   return (
     <div className="welcome-screen">
-       <div className="welcome-greeting">
-         <h2 className="gradient-text">您好，开发者</h2>
-         <p className="subtitle">我是您的 Gemini 代码助手。今天想做些什么？</p>
-       </div>
-       
-       <div className="suggestion-grid">
-          <div className="suggestion-card" onClick={() => onHandlePromptSubmit("帮我分析当前项目的架构")}>
-             <span className="card-icon">🏗️</span>
-             <p>分析项目架构</p>
+      <div className="welcome-content">
+        <div className="welcome-header">
+          <div className="welcome-logo">
+            Gemini
+            <span className="material-symbols-outlined sparkles-icon">sparkles</span>
           </div>
-          <div className="suggestion-card" onClick={() => onHandlePromptSubmit("检查代码中的潜在漏洞")}>
-             <span className="card-icon">🛡️</span>
-             <p>安全漏洞检查</p>
-          </div>
-          <div className="suggestion-card" onClick={() => onHandlePromptSubmit("为我编写单元测试")}>
-             <span className="card-icon">🧪</span>
-             <p>编写单元测试</p>
-          </div>
-          <div className="suggestion-card" onClick={() => onHandlePromptSubmit("重构并优化这段逻辑")}>
-             <span className="card-icon">⚡</span>
-             <p>重构优化代码</p>
-          </div>
-       </div>
+          <h1>欢迎使用 Gemini Web CLI</h1>
+          <p>智能、快速、可视化的终端执行环境</p>
+        </div>
+
+        <div className="quick-actions-grid">
+          {actions.map((action) => (
+            <div 
+              key={action.cmd} 
+              className="action-card"
+              onClick={() => onHandlePromptSubmit(action.cmd)}
+            >
+              <div className="action-icon">
+                <span className="material-symbols-outlined">{action.icon}</span>
+              </div>
+              <h3>{action.title}</h3>
+              <p>{action.desc}</p>
+              <div className="action-footer">
+                <code>{action.cmd}</code>
+                <span className="material-symbols-outlined">arrow_forward</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        
+        <div className="welcome-footer">
+          <p>提示：你可以直接在终端输入指令，或点击上方卡片快速开始。</p>
+        </div>
+      </div>
     </div>
   );
 };

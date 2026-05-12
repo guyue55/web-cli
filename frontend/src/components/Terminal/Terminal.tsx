@@ -16,18 +16,12 @@ import {
 import { TerminalStatusBar } from './TerminalStatusBar';
 import { TerminalHeader } from './TerminalHeader';
 
-interface TerminalProps {
-  uuid: string;
-  projectPath: string;
-  initialPrompt?: string | null;
-  theme?: string;
-  onSendToChat?: (text: string) => void;
-}
+import type { TerminalProps } from '@web-cli/shared';
 
 // eslint-disable-next-line no-control-regex
 const stripAnsi = (str: string) => str.replace(/[\u001b\u009b][[()#;?]*(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d/#&.:=?%@~]*)*)?\u0007/g, '');
 
-const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, theme, onSendToChat }) => {
+const Terminal: React.FC<TerminalProps> = React.memo(({ uuid, projectPath, initialPrompt, theme, onSendToChat }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
@@ -55,6 +49,7 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [isFocusHighlight, setIsFocusHighlight] = useState(false);
   const [isOverlayDismissed, setIsOverlayDismissed] = useState(false);
+  const [errorDetailsVisible, setErrorDetailsVisible] = useState(false);
   
   const [commandHistory, setHistory] = useState<string[]>(() => {
     const saved = localStorage.getItem('terminal_cmd_history');
@@ -694,13 +689,44 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
     lastTapRef.current = now;
   }, [handlePaste]);
 
-  const handleForceRestart = async () => {
+  const fallbackCopyText = useCallback((text: string) => {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.style.position = "fixed";
+    textArea.style.left = "-9999px";
+    textArea.style.top = "0";
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    try {
+      document.execCommand("copy");
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
+    } catch (err) {
+      console.error('Fallback copy failed:', err);
+    }
+    document.body.removeChild(textArea);
+  }, []);
+
+  const copyErrorToClipboard = useCallback((text: string) => {
+    const cleanText = stripAnsi(text);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(cleanText).then(() => {
+        setIsCopied(true);
+        setTimeout(() => setIsCopied(false), 2000);
+      }).catch(() => fallbackCopyText(cleanText));
+    } else {
+      fallbackCopyText(cleanText);
+    }
+  }, [fallbackCopyText]);
+
+  const handleForceRestart = useCallback(async () => {
     try {
       setStatus('connecting');
       await ApiService.restartSession(activeTabId, projectPath);
       connect(xtermRef.current?.cols, xtermRef.current?.rows);
     } catch { connect(); }
-  };
+  }, [activeTabId, projectPath, connect]);
 
   const handleDownload = () => {
     if (!xtermRef.current) return;
@@ -944,8 +970,29 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
                  <button className="overlay-close-btn" onClick={() => setIsOverlayDismissed(true)}>×</button>
                  <div className="gemini-error-icon-container"><IconInterrupt /></div>
                  <h3>执行环境异常</h3>
-                 <p className="error-msg-detail">{systemError}</p>
-                 <button className="btn-gemini-glow error-bg" onClick={() => connect()}><IconRefresh /> 重新连接</button>
+                 <div 
+                   className="error-msg-container"
+                   onMouseEnter={() => setErrorDetailsVisible(true)}
+                   onMouseLeave={() => setErrorDetailsVisible(false)}
+                 >
+                   <p className="error-msg-detail">
+                     {systemError.length > 150 ? systemError.slice(0, 150) + '...' : systemError}
+                     {systemError.length > 150 && (
+                       <span className="error-more-indicator"> (悬浮查看详情)</span>
+                     )}
+                   </p>
+                   {errorDetailsVisible && systemError.length > 150 && (
+                     <div className="error-details-tooltip glass-effect">
+                       {systemError}
+                     </div>
+                   )}
+                 </div>
+                 <div className="error-actions">
+                   <button className="btn-gemini-glow error-bg" onClick={() => connect()}><IconRefresh /> 重新连接</button>
+                   <button className="btn-gemini-outline" onClick={() => copyErrorToClipboard(systemError)}>
+                     <IconCopy /> 复制错误详情
+                   </button>
+                 </div>
               </div>
            </div>
         )}
@@ -953,6 +1000,6 @@ const Terminal: React.FC<TerminalProps> = ({ uuid, projectPath, initialPrompt, t
       <TerminalStatusBar ws={wsInstance} status={status} />
     </div>
   );
-};
+});
 
 export default Terminal;

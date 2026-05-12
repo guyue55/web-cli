@@ -1,5 +1,5 @@
 import { WebSocket } from 'ws';
-import { type ISession } from '../types/session.js';
+import { type ISession } from '@web-cli/shared';
 import { PTYFactory } from './PTYFactory.js';
 
 export class SessionManager {
@@ -37,7 +37,7 @@ export class SessionManager {
       projectPath,
       pty: ptyProcess,
       buffer: '',
-      clients: new Set()
+      clients: new Set<WebSocket>()
     };
 
     ptyProcess.onData((data: string) => {
