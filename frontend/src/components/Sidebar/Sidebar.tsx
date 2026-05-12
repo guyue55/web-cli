@@ -231,31 +231,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="sidebar-bottom-container" ref={menuRef}>
             {isMenuOpen && (
               <div className="sidebar-floating-menu glass-effect">
-                <div className="menu-item" onClick={() => { /* logic for help */ setIsMenuOpen(false); }}>
+                <div className="menu-item" onClick={() => { setIsMenuOpen(false); }}>
                   <span className="material-symbols-outlined">help</span>
-                  <span>帮助</span>
+                  <span>帮助 (Help)</span>
                 </div>
-                <div className="menu-item" onClick={() => { /* logic for activity */ setIsMenuOpen(false); }}>
+                <div className="menu-item" onClick={() => { setIsMenuOpen(false); }}>
                   <span className="material-symbols-outlined">history</span>
-                  <span>活动</span>
+                  <span>活动 (Activity)</span>
                 </div>
-                <div className="menu-item" onClick={() => { /* logic for settings */ setIsMenuOpen(false); }}>
+                <div className="menu-divider" />
+                <div className="menu-item" onClick={() => { setIsMenuOpen(false); }}>
                   <span className="material-symbols-outlined">settings</span>
-                  <span>设置</span>
+                  <span>设置 (Settings)</span>
                 </div>
               </div>
             )}
             <div 
-              className={`sidebar-item-static ${isMenuOpen ? 'active' : ''}`} 
+              className={`sidebar-item-static settings-btn ${isMenuOpen ? 'active' : ''}`} 
               onClick={() => setIsMenuOpen(!isMenuOpen)}
-              title="菜单"
+              title="设置"
             >
                <span className="icon-span">
-                 <span className="material-symbols-outlined">
-                   {isMenuOpen ? 'close' : 'settings'}
-                 </span>
+                 <span className="material-symbols-outlined">settings</span>
                </span>
-               {!collapsed && <span>{isMenuOpen ? '关闭' : '设置'}</span>}
+               {!collapsed && <span>设置</span>}
             </div>
           </div>
       </div>

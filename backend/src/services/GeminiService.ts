@@ -51,14 +51,18 @@ export class GeminiService {
               let uuid = '';
               let sessionName = 'Untitled Session';
               try {
-                // Read only the first 2KB for efficiency
+                // Read only the first 64KB for efficiency
                 const fd = fs.openSync(filePath, 'r');
-                const buffer = Buffer.alloc(2048);
-                const bytesRead = fs.readSync(fd, buffer, 0, 2048, 0);
+                const buffer = Buffer.alloc(65536);
+                const bytesRead = fs.readSync(fd, buffer, 0, 65536, 0);
                 fs.closeSync(fd);
                 
                 const contentPrefix = buffer.toString('utf-8', 0, bytesRead);
                 const lines = contentPrefix.split('\n');
+                // Remove last line if it's likely partial
+                if (bytesRead === 65536 && !contentPrefix.endsWith('\n')) {
+                  lines.pop();
+                }
 
                 if (lines[0]) {
                   try {
@@ -67,7 +71,11 @@ export class GeminiService {
                     if (firstEntry.customName) {
                       sessionName = firstEntry.customName;
                     }
-                  } catch (e) {}
+                  } catch (e) {
+                    if (lines[0].length > 60000) {
+                      console.warn(`[GeminiService] First line too long (>64KB) for session ${file}`);
+                    }
+                  }
                 }
 
                 // If UUID extraction failed from first line, fallback to filename logic
@@ -85,6 +93,13 @@ export class GeminiService {
                                     (Array.isArray(entry.content) ? entry.content.map((p: any) => p.text || '').join('') : 'Complex Session');
                       if (sessionName.length > 50) sessionName = sessionName.substring(0, 47) + '...';
                     } catch (e) {}
+                  }
+                }
+
+                if (sessionName === 'Untitled Session') {
+                  console.log(`[GeminiService] Could not determine name for ${file}, prefix length: ${contentPrefix.length}, lines: ${lines.length}`);
+                  if (lines.length > 0 && lines[0]) {
+                     console.log(`[GeminiService] Sample line: ${lines[0].substring(0, 100)}...`);
                   }
                 }
               } catch (e) {

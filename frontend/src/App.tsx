@@ -71,7 +71,12 @@ function App() {
     if (!text.trim()) return;
     
     if (!selectedSession) {
-      const defaultProject = projects[0] || { path: '/', name: 'default' };
+      // Find the last used project path from groupedHistory or projects
+      const lastSession = groupedHistory[0]?.items[0];
+      const defaultProject = lastSession 
+        ? { path: lastSession.projectPath, name: lastSession.projectName }
+        : (projects[0] || { path: '.', name: 'default' });
+
       const newSession: HistoryItem = {
         id: `new-${Date.now()}`,
         name: text.substring(0, 30),

@@ -46,14 +46,18 @@ export class GeminiDiscovery {
             let uuid = '';
             let sessionName = 'Untitled Session';
             try {
-              // Read only the first 2KB for UUID and name to be efficient
+              // Read only the first 64KB for UUID and name to be efficient
               const fd = fs.openSync(filePath, 'r');
-              const buffer = Buffer.alloc(2048);
-              const bytesRead = fs.readSync(fd, buffer, 0, 2048, 0);
+              const buffer = Buffer.alloc(65536);
+              const bytesRead = fs.readSync(fd, buffer, 0, 65536, 0);
               fs.closeSync(fd);
               
               const contentPrefix = buffer.toString('utf-8', 0, bytesRead);
               const lines = contentPrefix.split('\n');
+              // Remove last line if it's likely partial
+              if (bytesRead === 65536 && !contentPrefix.endsWith('\n')) {
+                lines.pop();
+              }
               
               // 1. Get full UUID from first line
               if (lines[0]) {
@@ -63,7 +67,12 @@ export class GeminiDiscovery {
                   if (firstEntry.customName) {
                     sessionName = firstEntry.customName;
                   }
-                } catch (e) {}
+                } catch (e) {
+                  // If first line is huge and still truncated at 64KB, we log it
+                  if (lines[0].length > 60000) {
+                    console.warn(`[GeminiDiscovery] First line too long (>64KB) for session ${file}`);
+                  }
+                }
               }
 
               // Fallback to filename parsing if content is corrupted or UUID missing
@@ -92,7 +101,16 @@ export class GeminiDiscovery {
                         break; 
                       }
                     }
-                  } catch (e) {}
+                  } catch (e) {
+                    // Ignore partial lines
+                  }
+                }
+              }
+
+              if (sessionName === 'Untitled Session') {
+                console.log(`[GeminiDiscovery] Could not determine name for ${file}, prefix length: ${contentPrefix.length}, lines: ${lines.length}`);
+                if (lines.length > 0 && lines[0]) {
+                   console.log(`[GeminiDiscovery] Sample line: ${lines[0].substring(0, 100)}...`);
                 }
               }
             } catch (e) {

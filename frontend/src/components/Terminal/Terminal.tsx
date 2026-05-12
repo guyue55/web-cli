@@ -165,7 +165,6 @@ const TerminalSession = React.memo(({
       wsRef.current.onclose = null;
       wsRef.current.close();
     }
-    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
 
     setStatus('connecting');
     setIsOverlayDismissed(false);
@@ -184,8 +183,11 @@ const TerminalSession = React.memo(({
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
+    let isConnected = false;
     ws.onopen = () => {
+      isConnected = true;
       setStatus('connected');
+      setSystemError(null);
       reconnectAttemptsRef.current = 0;
       if (!initialCols && xtermRef.current) {
         fitAddonRef.current?.fit();
@@ -195,26 +197,33 @@ const TerminalSession = React.memo(({
     };
 
     ws.onclose = (event) => {
-      setStatus('disconnected');
-      // Only show error if we are not attempting a reconnect
-      if (event.code !== 1000 && reconnectAttemptsRef.current >= 3) {
-        setSystemError(`连接意外断开 (代码: ${event.code})。请检查后端服务状态或尝试重新连接。`);
+      isConnected = false;
+      // Normal close (1000) or we are intentionally closing
+      if (event.code === 1000) {
+        setStatus('disconnected');
+        return;
+      }
+
+      // If unexpected close, attempt silent reconnect
+      if (reconnectAttemptsRef.current < 10) {
+        reconnectAttemptsRef.current += 1;
+        setStatus('connecting');
+        reconnectTimerRef.current = setTimeout(() => connect(initialCols, initialRows), 1000 * Math.min(reconnectAttemptsRef.current, 5));
+      } else {
+        setStatus('disconnected');
+        setSystemError(`连接已断开 (代码: ${event.code})。重连多次失败，请检查网络或后端服务。`);
       }
     };
 
     ws.onerror = () => {
-      if (reconnectAttemptsRef.current < 3) {
-        reconnectAttemptsRef.current += 1;
-        reconnectTimerRef.current = setTimeout(() => connect(initialCols, initialRows), 1500);
-      } else {
-        setStatus('disconnected');
-        setSystemError('无法建立 WebSocket 连接。执行环境可能已关闭或网络受限。');
-      }
+      isConnected = false;
+      // error usually followed by close, handled in onclose
     };
 
     const writeBuffer: string[] = [];
     let rafId: number;
     let isInitialBuffer = true;
+    let hasReceivedData = false;
 
     const flushBuffer = async () => {
       if (writeBuffer.length > 0 && xtermRef.current) {
@@ -233,36 +242,36 @@ const TerminalSession = React.memo(({
         const payload = JSON.parse(event.data);
         if (payload.type === 'output' && xtermRef.current) {
           const data = payload.data;
+          if (data) hasReceivedData = true;
           writeBuffer.push(data);
           if (!isInitialBuffer && (data.includes('[System Error]') || data.includes('[Critical Error]'))) {
             setSystemError(stripAnsi(data).replace(/\[(System|Critical) Error\]/, '').trim());
           }
           isInitialBuffer = false;
         } else if (payload.type === 'exit') {
+          isConnected = false;
           setStatus('disconnected');
         }
       } catch { /* ignore */ }
     };
 
+    // Auto-send initial prompt once connected AND we've seen some output
+    const checkReady = setInterval(() => {
+      if (initialPrompt && isConnected && hasReceivedData && wsRef.current?.readyState === WebSocket.OPEN) {
+        const lockKey = `${id}-${initialPrompt}`;
+        if (executionLockedRef.current !== lockKey) {
+          wsRef.current.send(JSON.stringify({ type: 'input', data: initialPrompt + '\r' }));
+          executionLockedRef.current = lockKey;
+          clearInterval(checkReady);
+        }
+      }
+    }, 100);
+
     ws.addEventListener('close', () => {
        cancelAnimationFrame(rafId);
+       clearInterval(checkReady);
     });
-  }, [id, projectPath]);
-
-  useEffect(() => {
-    if (initialPrompt && status === 'connected' && wsRef.current?.readyState === WebSocket.OPEN) {
-       const lockKey = `${id}-${initialPrompt}`;
-       if (executionLockedRef.current !== lockKey) {
-          // Small delay to ensure backend PTY is fully initialized for input
-          setTimeout(() => {
-            if (wsRef.current?.readyState === WebSocket.OPEN) {
-              wsRef.current.send(JSON.stringify({ type: 'input', data: initialPrompt + '\r' }));
-            }
-          }, 300);
-          executionLockedRef.current = lockKey;
-       }
-    }
-  }, [initialPrompt, status, id]);
+  }, [id, projectPath, initialPrompt]);
 
   useEffect(() => {
     if (!terminalRef.current) return;
@@ -417,7 +426,8 @@ const TerminalSession = React.memo(({
     if (active && xtermRef.current && fitAddonRef.current) {
       // Multiple attempts to ensure layout is settled
       const attemptFit = () => {
-        if (terminalRef.current?.offsetParent && fitAddonRef.current) {
+        const termNode = terminalRef.current;
+        if (termNode && termNode.clientWidth > 0 && fitAddonRef.current) {
           fitAddonRef.current.fit();
           xtermRef.current?.focus();
           // Sync size if connected
@@ -428,15 +438,22 @@ const TerminalSession = React.memo(({
       };
 
       attemptFit();
-      const t1 = setTimeout(attemptFit, 100);
-      const t2 = setTimeout(attemptFit, 500); // 2nd attempt for slower layout shifts
+      const timers = [100, 300, 600, 1000, 2000].map(ms => setTimeout(attemptFit, ms));
       
-      return () => {
-        clearTimeout(t1);
-        clearTimeout(t2);
-      };
+      return () => timers.forEach(clearTimeout);
     }
   }, [active]);
+
+  const [hasEverBeenActive, setHasEverBeenActive] = useState(active);
+  useEffect(() => {
+    if (active) setHasEverBeenActive(true);
+  }, [active]);
+
+  useEffect(() => {
+    if (hasEverBeenActive && status === 'disconnected' && !systemError && !isOverlayDismissed) {
+       connect();
+    }
+  }, [hasEverBeenActive, status, systemError, isOverlayDismissed, connect]);
 
   useEffect(() => {
     onSessionUpdate(id, {
@@ -494,7 +511,7 @@ const TerminalSession = React.memo(({
          </div>
       )}
 
-      {systemError && !isOverlayDismissed && (
+      {systemError && !isOverlayDismissed && status !== 'connected' && (
          <div className="terminal-overlay-modern">
             <div className="overlay-card-gemini glass-effect error-border">
                <button className="overlay-close-btn" onClick={() => setIsOverlayDismissed(true)}>×</button>
