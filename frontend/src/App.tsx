@@ -6,6 +6,8 @@ import { PromptBox } from './components/PromptBox/PromptBox';
 import { useSessions, type HistoryItem } from './hooks/useSessions';
 import { useTranscript } from './hooks/useTranscript';
 import { useTheme } from './hooks/useTheme';
+import { Header } from './components/Layout/Header';
+import { WelcomeScreen } from './components/Layout/WelcomeScreen';
 import './App.css';
 
 function App() {
@@ -119,42 +121,13 @@ function App() {
       />
 
       <div className="main-content">
-        <header className="header">
-          <div className="header-left">
-             <span className="brand-logo">
-               Gemini
-               <span className="material-symbols-outlined sparkles-icon">sparkles</span>
-             </span>
-          </div>
-          
-          <div className="header-center">
-            <h1>{selectedSession?.name || 'Gemini'}</h1>
-          </div>
-          
-          <div className="header-right">
-             <button className="theme-toggle" onClick={toggleTheme} title="切换主题">
-                <span className="material-symbols-outlined">
-                   {theme === 'dark' ? 'light_mode' : 'dark_mode'}
-                </span>
-             </button>
-             {selectedSession && (
-               <div className="header-tabs">
-                 <button 
-                   className={`tab-btn ${!isLiveMode ? 'active' : ''}`}
-                   onClick={() => toggleLiveMode(false)}
-                 >
-                   历史
-                 </button>
-                 <button 
-                   className={`tab-btn ${isLiveMode ? 'active' : ''}`}
-                   onClick={() => toggleLiveMode(true)}
-                 >
-                   交互
-                 </button>
-               </div>
-             )}
-          </div>
-        </header>
+        <Header 
+          selectedSession={selectedSession}
+          theme={theme}
+          isLiveMode={isLiveMode}
+          onToggleTheme={toggleTheme}
+          onToggleLiveMode={toggleLiveMode}
+        />
 
         <div className={`content-area ${isLiveMode ? 'live-mode' : ''}`}>
           {selectedSession ? (
@@ -186,31 +159,7 @@ function App() {
               </div>
             </div>
           ) : (
-            <div className="welcome-screen">
-               <div className="welcome-greeting">
-                 <h2 className="gradient-text">您好，开发者</h2>
-                 <p className="subtitle">我是您的 Gemini 代码助手。今天想做些什么？</p>
-               </div>
-               
-               <div className="suggestion-grid">
-                  <div className="suggestion-card" onClick={() => handlePromptSubmit("帮我分析当前项目的架构")}>
-                     <span className="card-icon">🏗️</span>
-                     <p>分析项目架构</p>
-                  </div>
-                  <div className="suggestion-card" onClick={() => handlePromptSubmit("检查代码中的潜在漏洞")}>
-                     <span className="card-icon">🛡️</span>
-                     <p>安全漏洞检查</p>
-                  </div>
-                  <div className="suggestion-card" onClick={() => handlePromptSubmit("为我编写单元测试")}>
-                     <span className="card-icon">🧪</span>
-                     <p>编写单元测试</p>
-                  </div>
-                  <div className="suggestion-card" onClick={() => handlePromptSubmit("重构并优化这段逻辑")}>
-                     <span className="card-icon">⚡</span>
-                     <p>重构优化代码</p>
-                  </div>
-               </div>
-            </div>
+            <WelcomeScreen onHandlePromptSubmit={handlePromptSubmit} />
           )}
         </div>
 

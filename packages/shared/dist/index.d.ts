@@ -39,4 +39,21 @@ export interface ChatMessage {
     content: string;
     timestamp?: string;
 }
+export interface IPtyProcess {
+    write: (data: string) => void;
+    resize: (cols: number, rows: number) => void;
+    onData: (cb: (data: string) => void) => void;
+    onExit: (cb: (status: {
+        exitCode: number;
+        signal?: number;
+    }) => void) => void;
+    kill: () => void;
+}
+export interface TerminalProps {
+    uuid: string;
+    projectPath: string;
+    initialPrompt?: string | null;
+    theme?: string;
+    onSendToChat?: (text: string) => void;
+}
 //# sourceMappingURL=index.d.ts.map
