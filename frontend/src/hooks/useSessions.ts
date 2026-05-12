@@ -82,10 +82,15 @@ export function useSessions() {
 
   }, [projects, history]);
 
+  const renameSessionLocal = (id: string, newName: string) => {
+    setHistory(prev => prev.map(h => h.id === id ? { ...h, name: newName } : h));
+  };
+
   return {
     activeSessions,
     projects,
     groupedHistory: sortedAndGroupedHistory,
-    isDiscovering
+    isDiscovering,
+    renameSessionLocal
   };
 }

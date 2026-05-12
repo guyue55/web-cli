@@ -268,6 +268,11 @@ body, html, #root {
   justify-content: center;
 }
 
+.message-actions-wrapper {
+  position: relative;
+  width: 100%;
+}
+
 .message-actions {
   display: flex;
   gap: 8px;
@@ -276,8 +281,28 @@ body, html, #root {
   transition: opacity 0.2s ease;
 }
 
-.chat-bubble.assistant:hover .message-actions {
+.chat-bubble.assistant:hover .message-actions,
+.chat-bubble.user:hover .message-actions {
   opacity: 1;
+}
+
+.chat-bubble.user .message-actions-wrapper {
+  position: absolute;
+  left: -48px;
+  top: 0;
+  height: 100%;
+  width: auto;
+  display: flex;
+  align-items: flex-start;
+  padding-top: 4px;
+}
+
+.chat-bubble.user .message-actions {
+  margin-top: 0;
+}
+
+.chat-bubble.user .bubble-content {
+  position: relative;
 }
 
 .action-btn-circle {
@@ -391,7 +416,9 @@ body, html, #root {
   border-radius: 12px;
   cursor: pointer;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   border: 1px solid transparent;
   white-space: nowrap;
@@ -417,9 +444,109 @@ body, html, #root {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
 }
 
-.history-footer { display: flex; justify-content: flex-end; margin-top: 2px; font-size: 10px; color: var(--text-dim); min-height: 6px; }
+.sidebar-wrapper.collapsed .sidebar-top,
+.sidebar-wrapper.collapsed .sidebar-bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.new-chat-btn-official.is-mini {
+  width: 40px;
+  min-width: 40px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 50%;
+  margin: 4px auto 16px;
+}
+
+.sidebar-bottom-container {
+  position: relative;
+  width: 100%;
+}
+
+.sidebar-floating-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 12px;
+  right: 12px;
+  background-color: var(--bg-main);
+  border-radius: 16px;
+  padding: 8px;
+  box-shadow: var(--shadow-float);
+  border: 1px solid var(--border-subtle);
+  z-index: 200;
+  animation: slideUpMenu 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideUpMenu {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.sidebar-floating-menu .menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+  color: var(--text-primary);
+}
+
+.sidebar-floating-menu .menu-item:hover {
+  background-color: var(--bg-hover);
+}
+
+.session-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rename-btn {
+  background: transparent;
+  border: none;
+  padding: 4px;
+  border-radius: 4px;
+  color: var(--text-dim);
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+}
+
+.session-card:hover .rename-btn {
+  opacity: 1;
+}
+
+.rename-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.rename-input {
+  background: var(--bg-hover);
+  border: 1px solid var(--accent-blue);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 14px;
+  color: var(--text-primary);
+  width: 100%;
+  outline: none;
+}
+
+.sidebar-item-static.active {
+  background-color: var(--bg-hover);
+  color: var(--accent-blue);
+}
 
 .collapsed-project-indicator {
   padding: 16px 0;
@@ -656,6 +783,7 @@ body, html, #root {
   width: 100%;
   align-items: flex-start;
   opacity: 0;
+  position: relative;
 }
 
 @keyframes fadeInUp {
@@ -663,7 +791,10 @@ body, html, #root {
   to { opacity: 1; transform: translateY(0); }
 }
 
-.chat-bubble.user { flex-direction: row-reverse; }
+.chat-bubble.user { 
+  flex-direction: row-reverse; 
+  padding-left: 48px;
+}
 
 .bubble-avatar {
   width: 32px;
@@ -806,19 +937,59 @@ body, html, #root {
   border-color: rgba(66, 133, 244, 0.4);
 }
 
+.prompt-input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  width: 100%;
+}
+
 .prompt-textarea {
   width: 100%;
   background: transparent;
-  border: none;
+  border: none !important;
   color: var(--text-primary);
   padding: 8px 12px;
   font-size: 15px;
-  outline: none;
-  resize: none;
+  outline: none !important;
+  resize: none !important;
   font-family: var(--font-main);
   line-height: 1.5;
   max-height: 200px;
   min-height: 24px;
+  overflow-y: hidden;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+/* Aggressively hide all browser-native UI elements that might look like arrows or handles */
+.prompt-textarea::-webkit-outer-spin-button,
+.prompt-textarea::-webkit-inner-spin-button,
+.prompt-textarea::-webkit-calendar-picker-indicator,
+.prompt-textarea::-webkit-search-cancel-button,
+.prompt-textarea::-webkit-search-decoration,
+.prompt-textarea::-webkit-search-results-button,
+.prompt-textarea::-webkit-search-results-decoration,
+.prompt-textarea::-webkit-scrollbar,
+.prompt-textarea::-webkit-scrollbar-button,
+.prompt-textarea::-webkit-scrollbar-thumb,
+.prompt-textarea::-webkit-scrollbar-track,
+.prompt-textarea::-webkit-scrollbar-corner,
+.prompt-textarea::-webkit-resizer {
+  -webkit-appearance: none !important;
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+
+.prompt-textarea:focus {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .prompt-actions { 
@@ -1198,10 +1369,18 @@ body, html, #root {
   background: var(--bg-sidebar);
   border-bottom: 1px solid var(--border-subtle);
   overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.terminal-tabs-bar::-webkit-scrollbar {
+  display: none;
 }
 
 .terminal-tab {
-  padding: 8px 20px;
+  flex: 0 0 auto;
+  min-width: 100px;
+  max-width: 180px;
+  padding: 8px 16px;
   background: rgba(0,0,0,0.05);
   border-radius: 12px 12px 0 0;
   font-size: 12px;
@@ -1212,11 +1391,16 @@ body, html, #root {
   align-items: center;
   gap: 10px;
   border: 1px solid transparent;
-  border-top: 2px solid transparent; /* Rigid height to prevent layout jitter */
+  border-top: 2px solid transparent;
   border-bottom: none;
-  transition: background-color 0.2s, color 0.2s, border-color 0.2s;
-  min-width: 120px;
-  position: relative;
+  transition: all 0.2s;
+  overflow: hidden;
+}
+
+.tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dark .terminal-tab {
@@ -2812,10 +2996,17 @@ body, html, #root {
 }
 
 .quick-actions-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 20px;
+  display: flex;
+  gap: 16px;
   margin-bottom: 48px;
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 4px;
+}
+
+.quick-actions-grid::-webkit-scrollbar {
+  display: none;
 }
 
 .action-card {

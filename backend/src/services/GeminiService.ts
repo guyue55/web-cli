@@ -64,6 +64,9 @@ export class GeminiService {
                   try {
                     const firstEntry = JSON.parse(lines[0]);
                     uuid = firstEntry.sessionId || '';
+                    if (firstEntry.customName) {
+                      sessionName = firstEntry.customName;
+                    }
                   } catch (e) {}
                 }
 
@@ -73,14 +76,16 @@ export class GeminiService {
                   uuid = (match ? match[1] : null) || file.replace('.jsonl', '');
                 }
 
-                const firstMsgLine = lines.find(l => l && l.trim() && l.includes('"type":"user"'));
-                if (firstMsgLine) {
-                  try {
-                    const entry = JSON.parse(firstMsgLine);
-                    sessionName = typeof entry.content === 'string' ? entry.content : 
-                                  (Array.isArray(entry.content) ? entry.content.map((p: any) => p.text || '').join('') : 'Complex Session');
-                    if (sessionName.length > 50) sessionName = sessionName.substring(0, 47) + '...';
-                  } catch (e) {}
+                if (sessionName === 'Untitled Session') {
+                  const firstMsgLine = lines.find(l => l && l.trim() && l.includes('"type":"user"'));
+                  if (firstMsgLine) {
+                    try {
+                      const entry = JSON.parse(firstMsgLine);
+                      sessionName = typeof entry.content === 'string' ? entry.content : 
+                                    (Array.isArray(entry.content) ? entry.content.map((p: any) => p.text || '').join('') : 'Complex Session');
+                      if (sessionName.length > 50) sessionName = sessionName.substring(0, 47) + '...';
+                    } catch (e) {}
+                  }
                 }
               } catch (e) {
                 if (!uuid) {
@@ -121,43 +126,57 @@ export class GeminiService {
       if (!fs.existsSync(chatDir)) return [];
 
       const files = fs.readdirSync(chatDir);
-      const shortId = uuid.substring(0, 8);
-      const sessionFile = files.find(f => f.includes(shortId) && f.endsWith('.jsonl'));
+      // Use exact match or contains with UUID to avoid shortId collision
+      const sessionFile = files.find(f => f.includes(uuid) && f.endsWith('.jsonl'));
 
-      if (!sessionFile) return [];
-
-      const filePath = path.join(chatDir, sessionFile);
-      const content = fs.readFileSync(filePath, 'utf-8');
-      const lines = content.split('\n').filter(l => l.trim());
-      
-      const allMessages: ChatMessage[] = [];
-      for (const line of lines) {
-        try {
-          const entry = JSON.parse(line);
-          if ((entry.type === 'user' || entry.type === 'gemini') && entry.content) {
-            let messageContent = '';
-            if (typeof entry.content === 'string') {
-              messageContent = entry.content;
-            } else if (Array.isArray(entry.content)) {
-              messageContent = entry.content.map((part: any) => part.text || '').join('');
-            }
-
-            allMessages.push({ 
-              role: entry.type === 'user' ? 'user' : 'assistant', 
-              content: messageContent.trim(), 
-              timestamp: entry.timestamp 
-            });
-          }
-        } catch (e) {}
+      if (!sessionFile) {
+        // Fallback to shortId search if full UUID file not found (legacy support)
+        const shortId = uuid.substring(0, 8);
+        const legacyFile = files.find(f => f.includes(shortId) && f.endsWith('.jsonl'));
+        if (!legacyFile) return [];
+        return this.parseTranscriptFile(path.join(chatDir, legacyFile), limit, offset);
       }
 
-      const reversed = [...allMessages].reverse();
-      const paginated = reversed.slice(offset, offset + limit);
-      return paginated.reverse();
+      return this.parseTranscriptFile(path.join(chatDir, sessionFile), limit, offset);
     } catch (error) {
       console.error(`GeminiService.getTranscript failed:`, error);
       return [];
     }
+  }
+
+  private static parseTranscriptFile(filePath: string, limit: number, offset: number): ChatMessage[] {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const lines = content.split('\n').filter(l => l.trim());
+    
+    const allMessages: ChatMessage[] = [];
+    for (const line of lines) {
+      try {
+        const entry = JSON.parse(line);
+        // Include more types to avoid "missing message" feel
+        // mapping 'gemini', 'thought', 'call' all to assistant for UI simplicity, 
+        // or keep original for specialized styling.
+        if (entry.content) {
+          let messageContent = '';
+          if (typeof entry.content === 'string') {
+            messageContent = entry.content;
+          } else if (Array.isArray(entry.content)) {
+            messageContent = entry.content.map((part: any) => part.text || '').join('');
+          }
+
+          if (messageContent.trim() || entry.type === 'thought' || entry.type === 'call') {
+            allMessages.push({ 
+              role: entry.type === 'user' ? 'user' : 'assistant', 
+              content: messageContent.trim() || `[${entry.type}]`, 
+              timestamp: entry.timestamp 
+            });
+          }
+        }
+      } catch (e) {}
+    }
+
+    const reversed = [...allMessages].reverse();
+    const paginated = reversed.slice(offset, offset + limit);
+    return paginated.reverse();
   }
 
   static async deleteSession(uuid: string, projectPath: string): Promise<void> {
@@ -181,6 +200,37 @@ export class GeminiService {
       }
     } catch (error) {
       console.error(`[GeminiService] deleteSession failed:`, error);
+      throw error;
+    }
+  }
+
+  static async renameSession(uuid: string, projectName: string, newName: string): Promise<void> {
+    try {
+      const chatDir = path.join(GEMINI_BASE_DIR, 'tmp', projectName, 'chats');
+      if (!fs.existsSync(chatDir)) return;
+
+      const files = fs.readdirSync(chatDir);
+      const shortId = uuid.substring(0, 8);
+      const sessionFile = files.find(f => f.includes(shortId) && f.endsWith('.jsonl'));
+
+      if (!sessionFile) return;
+
+      const filePath = path.join(chatDir, sessionFile);
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const lines = content.split('\n');
+      
+      if (lines.length > 0 && lines[0]) {
+        try {
+          const firstLine = JSON.parse(lines[0]);
+          firstLine.customName = newName;
+          lines[0] = JSON.stringify(firstLine);
+          fs.writeFileSync(filePath, lines.join('\n'), 'utf-8');
+        } catch (e) {
+          console.error(`Failed to parse first line for renaming:`, e);
+        }
+      }
+    } catch (error) {
+      console.error(`[GeminiService] renameSession failed:`, error);
       throw error;
     }
   }

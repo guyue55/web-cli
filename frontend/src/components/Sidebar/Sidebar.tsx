@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { HistoryItem, ProjectEntry } from '../../hooks/useSessions';
+import { ApiService } from '../../services/ApiService';
 
 interface SidebarProps {
   groupedHistory: { name: string, items: HistoryItem[] }[];
@@ -13,6 +14,7 @@ interface SidebarProps {
   isLoading: boolean;
   collapsed: boolean;
   onToggle: () => void;
+  renameSessionLocal: (id: string, name: string) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -26,22 +28,63 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSearchChange,
   isLoading,
   collapsed,
-  onToggle
+  onToggle,
+  renameSessionLocal
 }) => {
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>(() => {
     const saved = localStorage.getItem('gemini-collapsed-projects');
     return saved ? JSON.parse(saved) : {};
   });
 
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const menuRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     localStorage.setItem('gemini-collapsed-projects', JSON.stringify(collapsedProjects));
   }, [collapsedProjects]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const toggleProject = (projectName: string) => {
     setCollapsedProjects(prev => ({
       ...prev,
       [projectName]: !prev[projectName]
     }));
+  };
+
+  const handleStartRename = (e: React.MouseEvent, item: HistoryItem) => {
+    e.stopPropagation();
+    setEditingId(item.id);
+    setEditName(item.name);
+  };
+
+  const handleConfirmRename = async (item: HistoryItem) => {
+    if (!editName.trim() || editName === item.name) {
+      setEditingId(null);
+      return;
+    }
+    try {
+      await ApiService.renameSession(item.id, item.projectName, editName);
+      renameSessionLocal(item.id, editName);
+      setEditingId(null);
+    } catch {
+      alert('重命名失败');
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent, item: HistoryItem) => {
+    if (e.key === 'Enter') handleConfirmRename(item);
+    if (e.key === 'Escape') setEditingId(null);
   };
 
   return (
@@ -136,18 +179,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         return (
                           <li 
                             key={item.id} 
-                            className={`session-card ${item.id === selectedSession?.id ? 'active' : ''}`}
-                            onClick={() => onSelectSession(item)}
+                            className={`session-card ${item.id === selectedSession?.id ? 'active' : ''} ${editingId === item.id ? 'editing' : ''}`}
+                            onClick={() => editingId !== item.id && onSelectSession(item)}
                             title={hoverInfo}
                           >
-                            <div className="card-main">
-                              <span className="history-name">{item.name}</span>
-                            </div>
-                            
-                            {isActive && (
-                              <div className="history-footer">
-                                <div className="active-dot" style={{ width: 6, height: 6, backgroundColor: '#10b981', borderRadius: '50%', boxShadow: '0 0 4px #10b981' }} />
-                              </div>
+                            {editingId === item.id ? (
+                              <input 
+                                className="rename-input"
+                                autoFocus
+                                value={editName}
+                                onChange={(e) => setEditName(e.target.value)}
+                                onBlur={() => handleConfirmRename(item)}
+                                onKeyDown={(e) => handleKeyDown(e, item)}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            ) : (
+                              <>
+                                <span className="history-name">{item.name}</span>
+                                <div className="session-actions">
+                                   <button className="rename-btn" onClick={(e) => handleStartRename(e, item)}>
+                                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit</span>
+                                   </button>
+                                   {isActive && (
+                                     <div className="active-dot" style={{ flexShrink: 0, width: 6, height: 6, backgroundColor: '#10b981', borderRadius: '50%', boxShadow: '0 0 4px #10b981' }} />
+                                   )}
+                                </div>
+                              </>
                             )}
                           </li>
                         );
@@ -171,17 +228,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       <div className="sidebar-bottom">
-          <div className="sidebar-item-static" title="帮助">
-             <span className="icon-span"><span className="material-symbols-outlined">help</span></span>
-             {!collapsed && <span>帮助</span>}
-          </div>
-          <div className="sidebar-item-static" title="活动">
-             <span className="icon-span"><span className="material-symbols-outlined">history</span></span>
-             {!collapsed && <span>活动</span>}
-          </div>
-          <div className="sidebar-item-static" title="设置">
-             <span className="icon-span"><span className="material-symbols-outlined">settings</span></span>
-             {!collapsed && <span>设置</span>}
+          <div className="sidebar-bottom-container" ref={menuRef}>
+            {isMenuOpen && (
+              <div className="sidebar-floating-menu glass-effect">
+                <div className="menu-item">
+                  <span className="material-symbols-outlined">help</span>
+                  <span>帮助</span>
+                </div>
+                <div className="menu-item">
+                  <span className="material-symbols-outlined">history</span>
+                  <span>活动</span>
+                </div>
+              </div>
+            )}
+            <div 
+              className={`sidebar-item-static ${isMenuOpen ? 'active' : ''}`} 
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              title="设置"
+            >
+               <span className="icon-span"><span className="material-symbols-outlined">settings</span></span>
+               {!collapsed && <span>设置</span>}
+            </div>
           </div>
       </div>
     </div>

@@ -33,19 +33,19 @@ export const TerminalStatusBar = React.memo(({ ws, status }: { ws: WebSocket | n
 
   return (
     <div className="terminal-footer-status glass-effect">
-       <div className="footer-left">
-          <span className="footer-info-item"><span className="label">环境:</span> node v24.13.0</span>
-          <span className="footer-info-item"><span className="label">渲染:</span> xterm-webgl</span>
-       </div>
-       <div className="footer-right">
-          <span className="footer-info-item">
-            <span className="status-dot-mini connected" />
-            加密隧道已建立
-          </span>
-          {latency !== null && (
-            <span className="footer-info-item"><span className="label">延迟:</span> {latency}ms</span>
-          )}
-       </div>
+       <span className="footer-info-item">
+         <span className="status-dot-mini connected" />
+         <span className="label">STATUS:</span> 加密隧道已建立
+       </span>
+       {latency !== null && (
+         <span className="footer-info-item"><span className="label">延迟:</span> {latency}ms</span>
+       )}
+       {ws && (
+         <span className="footer-info-item">
+           <span className="label">SESSION:</span> 
+           {new URL(ws.url).searchParams.get('uuid')?.slice(0, 8)}
+         </span>
+       )}
     </div>
   );
 });

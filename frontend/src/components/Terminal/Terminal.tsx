@@ -372,15 +372,22 @@ const TerminalSession = React.memo(({
     termNode.addEventListener('mousedown', handleMouseDownInner);
     termNode.addEventListener('contextmenu', handleContextMenuInner);
 
-    // Keyboard shortcuts without triggering readText warning for Ctrl+V
+    // Keyboard shortcuts - prioritized native behavior for paste
     term.attachCustomKeyEventHandler((e) => {
       if (e.type === 'keydown') {
-        if ((e.ctrlKey || e.metaKey) && e.key === 'c' && term.hasSelection()) {
-          handleCopy();
+        const isCopy = (e.ctrlKey || e.metaKey) && e.key === 'c';
+        const isPaste = (e.ctrlKey || e.metaKey) && e.key === 'v';
+
+        if (isCopy && term.hasSelection()) {
+          // Native behavior for copy usually works well if selection is captured.
+          // Force update system clipboard if needed.
+          handleCopy(); 
           return false;
         }
-        // Let Ctrl+V bubble to native paste handler in terminal's textarea
-        if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+
+        if (isPaste) {
+          // DO NOT prevent default. Let browser's native paste handler in terminal's hidden textarea work.
+          // This ensures the MOST RECENT system clipboard content is pasted.
           return true;
         }
       }
@@ -794,7 +801,7 @@ const Terminal: React.FC<TerminalProps> = React.memo(({ uuid, projectPath, initi
       {isPaletteOpen && createPortal(
           <div className="terminal-command-palette glass-premium" style={{ position: 'fixed', top: '15%', left: '50%', transform: 'translateX(-50%)', zIndex: 9999 }}>
             <div className="palette-search-wrapper">
-              <span className="material-symbols-outlined" style={{ color: '#9b72cb' }}>sparkles</span>
+              <span className="material-symbols-outlined" style={{ color: 'var(--accent-blue)' }}>search</span>
               <input 
                 type="text" 
                 placeholder="键入指令或检索最近记录..." 
@@ -866,17 +873,6 @@ const Terminal: React.FC<TerminalProps> = React.memo(({ uuid, projectPath, initi
       {isCopied && createPortal(<div className="gemini-copy-toast glass-effect">已复制</div>, document.body)}
       {pasteError && createPortal(<div className="gemini-copy-toast glass-effect error-toast">{pasteError}</div>, document.body)}
       
-      <div className="terminal-footer-status">
-        <div className="footer-info-item">
-          <span className="label">STATUS:</span>
-          <span className={`status-dot-mini ${activeSession.status}`}></span>
-          <span>{activeSession.status}</span>
-        </div>
-        <div className="footer-info-item">
-          <span className="label">SESSION:</span>
-          <span>{activeTabId.slice(0, 8)}</span>
-        </div>
-      </div>
       <TerminalStatusBar ws={activeSession.ws} status={activeSession.status} />
     </div>
   );

@@ -11,7 +11,7 @@ import { WelcomeScreen } from './components/Layout/WelcomeScreen';
 import './App.css';
 
 function App() {
-  const { activeSessions, projects, groupedHistory, isDiscovering } = useSessions();
+  const { activeSessions, projects, groupedHistory, isDiscovering, renameSessionLocal } = useSessions();
   const [selectedSession, setSelectedSession] = useState<HistoryItem | null>(() => {
     const saved = localStorage.getItem('last_session_v2');
     return saved ? JSON.parse(saved) : null;
@@ -118,6 +118,7 @@ function App() {
         isLoading={isDiscovering}
         collapsed={isSidebarCollapsed}
         onToggle={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        renameSessionLocal={renameSessionLocal}
       />
 
       <div className="main-content">

@@ -9,6 +9,7 @@ apiRouter.get('/history', SessionController.getHistory);
 apiRouter.post('/history/refresh', SessionController.triggerRefresh);
 apiRouter.get('/history/:uuid/transcript', SessionController.getTranscript);
 apiRouter.delete('/history/:uuid', SessionController.deleteSession);
+apiRouter.patch('/history/:uuid/rename', SessionController.renameSession);
 apiRouter.post('/history/:uuid/restart', SessionController.forceRestartSession);
 
 apiRouter.get('/files', FileController.getFiles);

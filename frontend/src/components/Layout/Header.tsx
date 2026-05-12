@@ -21,7 +21,6 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="header-left">
          <span className="brand-logo">
            Gemini
-           <span className="material-symbols-outlined sparkles-icon">sparkles</span>
          </span>
       </div>
       

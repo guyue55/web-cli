@@ -52,6 +52,16 @@ export class ApiService {
     if (!res.ok) throw new Error('Failed to restart session');
   }
 
+  static async renameSession(uuid: string, projectName: string, newName: string): Promise<void> {
+    const url = `${BASE_URL}/history/${uuid}/rename`;
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectName, newName })
+    });
+    if (!res.ok) throw new Error('Failed to rename session');
+  }
+
   static connectDiscovery(onMessage: (msg: DiscoveryMessage) => void): () => void {
     const ws = new WebSocket(`${WS_URL}/discovery`);
     ws.onmessage = (event) => {

@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import type { ChatMessage } from '@web-cli/shared';
 
@@ -51,6 +51,21 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  // Group consecutive messages by role
+  const groupedTranscript = useMemo(() => {
+    const groups: { role: string, content: string, timestamp?: string }[] = [];
+    transcript.forEach((msg) => {
+      const lastGroup = groups[groups.length - 1];
+      const msgContent = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+      if (lastGroup && lastGroup.role === msg.role) {
+        lastGroup.content += '\n\n' + msgContent;
+      } else {
+        groups.push({ role: msg.role, content: msgContent, timestamp: msg.timestamp });
+      }
+    });
+    return groups;
+  }, [transcript]);
+
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     if (!isLoading && transcript.length > 0) {
@@ -74,9 +89,8 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
     }
   };
 
-  const copyFullMessage = (content: unknown) => {
-    const text = typeof content === 'string' ? content : JSON.stringify(content);
-    navigator.clipboard.writeText(text);
+  const copyFullMessage = (content: string) => {
+    navigator.clipboard.writeText(content);
     alert('消息已复制到剪贴板');
   };
 
@@ -90,7 +104,7 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
         )}
         
         <div className="chat-flow">
-          {transcript.map((msg, i) => (
+          {groupedTranscript.map((msg, i) => (
             <div key={i} className={`chat-bubble ${msg.role}`}>
               <div className="bubble-avatar">
                 {msg.role === 'user' ? (
@@ -100,33 +114,30 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
                 )}
               </div>
               <div className="bubble-content">
-                {msg.role === 'user' && (
-                   <div className="bubble-label">您</div>
-                )}
                 <div className="markdown-body">
-                  {typeof msg.content === 'string' ? (
-                     <ReactMarkdown components={{ pre: CodeBlock }}>{msg.content}</ReactMarkdown>
-                  ) : (
-                     <pre>{JSON.stringify(msg.content, null, 2)}</pre>
-                  )}
+                  <ReactMarkdown components={{ pre: CodeBlock }}>{msg.content}</ReactMarkdown>
                 </div>
                 
-                {msg.role === 'assistant' && (
+                <div className="message-actions-wrapper">
                   <div className="message-actions">
-                    <button className="action-btn-circle" title="复制" onClick={() => copyFullMessage(msg.content)}>
+                    <button className="action-btn-circle copy-btn" title="复制" onClick={() => copyFullMessage(msg.content)}>
                       <span className="material-symbols-outlined" style={{ fontSize: 18 }}>content_copy</span>
                     </button>
-                    <button className="action-btn-circle" title="好评">
-                      <span className="material-symbols-outlined" style={{ fontSize: 18 }}>thumb_up</span>
-                    </button>
-                    <button className="action-btn-circle" title="差评">
-                      <span className="material-symbols-outlined" style={{ fontSize: 18 }}>thumb_down</span>
-                    </button>
-                    <button className="action-btn-circle" title="分享">
-                      <span className="material-symbols-outlined" style={{ fontSize: 18 }}>share</span>
-                    </button>
+                    {msg.role === 'assistant' && (
+                      <>
+                        <button className="action-btn-circle" title="好评">
+                          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>thumb_up</span>
+                        </button>
+                        <button className="action-btn-circle" title="差评">
+                          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>thumb_down</span>
+                        </button>
+                        <button className="action-btn-circle" title="分享">
+                          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>share</span>
+                        </button>
+                      </>
+                    )}
                   </div>
-                )}
+                </div>
 
                 {msg.timestamp && (
                    <div className="bubble-timestamp">

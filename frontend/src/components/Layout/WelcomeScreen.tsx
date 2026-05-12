@@ -38,7 +38,6 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onHandlePromptSubm
         <div className="welcome-header">
           <div className="welcome-logo">
             Gemini
-            <span className="material-symbols-outlined sparkles-icon">sparkles</span>
           </div>
           <h1>欢迎使用 Gemini Web CLI</h1>
           <p>智能、快速、可视化的终端执行环境</p>

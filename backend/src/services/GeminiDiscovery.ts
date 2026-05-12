@@ -60,6 +60,9 @@ export class GeminiDiscovery {
                 try {
                   const firstEntry = JSON.parse(lines[0]);
                   uuid = firstEntry.sessionId || '';
+                  if (firstEntry.customName) {
+                    sessionName = firstEntry.customName;
+                  }
                 } catch (e) {}
               }
 
@@ -70,25 +73,27 @@ export class GeminiDiscovery {
               }
 
               // 2. Find first user message for session name (look in the prefix first)
-              for (let i = 1; i < lines.length; i++) {
-                const line = lines[i];
-                if (!line || !line.trim()) continue;
-                try {
-                  const entry = JSON.parse(line);
-                  if (entry.type === 'user' && entry.content) {
-                    let text = '';
-                    if (typeof entry.content === 'string') {
-                      text = entry.content;
-                    } else if (Array.isArray(entry.content)) {
-                      text = entry.content.map((p: any) => p.text || '').join('');
+              if (sessionName === 'Untitled Session') {
+                for (let i = 1; i < lines.length; i++) {
+                  const line = lines[i];
+                  if (!line || !line.trim()) continue;
+                  try {
+                    const entry = JSON.parse(line);
+                    if (entry.type === 'user' && entry.content) {
+                      let text = '';
+                      if (typeof entry.content === 'string') {
+                        text = entry.content;
+                      } else if (Array.isArray(entry.content)) {
+                        text = entry.content.map((p: any) => p.text || '').join('');
+                      }
+                      if (text.trim()) {
+                        sessionName = text.trim();
+                        if (sessionName.length > 50) sessionName = sessionName.substring(0, 47) + '...';
+                        break; 
+                      }
                     }
-                    if (text.trim()) {
-                      sessionName = text.trim();
-                      if (sessionName.length > 50) sessionName = sessionName.substring(0, 47) + '...';
-                      break; 
-                    }
-                  }
-                } catch (e) {}
+                  } catch (e) {}
+                }
               }
             } catch (e) {
               // Last resort fallback

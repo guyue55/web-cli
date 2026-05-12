@@ -59,6 +59,23 @@ export class SessionController {
     }
   }
 
+  static async renameSession(req: Request, res: Response) {
+    const { uuid } = req.params;
+    const { projectName, newName } = req.body;
+
+    if (!projectName || !newName) {
+      res.status(400).json({ error: 'projectName and newName are required' });
+      return;
+    }
+
+    try {
+      await GeminiService.renameSession(uuid as string, projectName, newName);
+      res.json({ message: 'Session renamed successfully' });
+    } catch (e) {
+      res.status(500).json({ error: (e as Error).message });
+    }
+  }
+
   static forceRestartSession(req: Request, res: Response) {
     const { uuid } = req.params;
     const projectPath = req.query.projectPath as string;
