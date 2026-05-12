@@ -93,9 +93,9 @@ export class SessionManager {
     if (session) {
       session.clients.delete(ws);
       
-      // If no clients left, schedule session destruction in 5 minutes
+      // If no clients left, schedule session destruction in 1 minute
       if (session.clients.size === 0) {
-        console.log(`[SessionManager] No clients left for ${sessionKey}. Scheduling destruction in 5m.`);
+        console.log(`[SessionManager] No clients left for ${sessionKey}. Scheduling destruction in 1m.`);
         const timeout = setTimeout(() => {
           console.log(`[SessionManager] Cleaning up idle session: ${sessionKey}`);
           if (session.pty && session.pty.kill) {
@@ -103,7 +103,7 @@ export class SessionManager {
           }
           this.sessions.delete(sessionKey);
           this.timeouts.delete(sessionKey);
-        }, 5 * 60 * 1000);
+        }, 1 * 60 * 1000);
         this.timeouts.set(sessionKey, timeout);
       }
     }

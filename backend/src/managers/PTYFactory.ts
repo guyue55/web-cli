@@ -96,7 +96,11 @@ export class PTYFactory {
                             (discoveryStep === 2 && msg.toLowerCase().includes('critical error'));
 
             if (isFatal) {
-               onDataCb(`\x1b[31m[System Error] ${msg}\x1b[0m`);
+               let customMsg = msg;
+               if (msg.includes('out of pty devices')) {
+                  customMsg = '系统 PTY 资源耗尽 (out of pty devices)。请关闭一些不用的终端标签或等待一分钟后重试。';
+               }
+               onDataCb(`\x1b[31m[System Error] ${customMsg}\x1b[0m`);
             } else {
                console.log(`[PTYFactory] Bridge stderr (info): ${msg}`);
             }

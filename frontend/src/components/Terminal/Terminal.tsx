@@ -80,6 +80,8 @@ const TerminalSession = React.memo(({
 
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const connTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stableTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const executionLockedRef = useRef<string | null>(null);
 
   const handlersRef = useRef({ setIsCopied, setPasteError, setContextMenu, setSelectionPosition, active });
@@ -161,14 +163,31 @@ const TerminalSession = React.memo(({
   }, []);
 
   const connect = useCallback((initialCols?: number, initialRows?: number) => {
+    // 1. Cleanup previous connection and timers
     if (wsRef.current) {
       wsRef.current.onclose = null;
+      wsRef.current.onerror = null;
       wsRef.current.close();
+      wsRef.current = null;
+    }
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    if (connTimeoutRef.current) {
+      clearTimeout(connTimeoutRef.current);
+      connTimeoutRef.current = null;
+    }
+    if (stableTimerRef.current) {
+      clearTimeout(stableTimerRef.current);
+      stableTimerRef.current = null;
     }
 
+    let isConnected = false;
     setStatus('connecting');
     setIsOverlayDismissed(false);
-    setSystemError(null);
+    // Only reset error if this is a fresh manual attempt (reconnectAttemptsRef.current === 0)
+    if (reconnectAttemptsRef.current === 0) setSystemError(null);
 
     const host = window.location.hostname || 'localhost';
     const isDefaultPort =
@@ -183,12 +202,52 @@ const TerminalSession = React.memo(({
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
-    let isConnected = false;
+    // 3. Connection timeout (15s)
+    connTimeoutRef.current = setTimeout(() => {
+      if (ws.readyState !== WebSocket.OPEN) {
+        console.warn('[Terminal] Connection timed out');
+        ws.onclose = null;
+        ws.onerror = null;
+        ws.close();
+        handleFailure({ code: 4008, reason: 'Connection Timeout' });
+      }
+    }, 15000);
+
+    const handleFailure = (errInfo: { code?: number, reason?: string }) => {
+      if (connTimeoutRef.current) {
+        clearTimeout(connTimeoutRef.current);
+        connTimeoutRef.current = null;
+      }
+      if (stableTimerRef.current) {
+        clearTimeout(stableTimerRef.current);
+        stableTimerRef.current = null;
+      }
+      
+      if (reconnectAttemptsRef.current < 3) {
+        reconnectAttemptsRef.current += 1;
+        setStatus('connecting');
+        const delay = 1000 * Math.min(reconnectAttemptsRef.current, 5);
+        reconnectTimerRef.current = setTimeout(() => connect(initialCols, initialRows), delay);
+      } else {
+        setStatus('disconnected');
+        setSystemError(`执行环境异常 (代码: ${errInfo.code || 'N/A'})。已重试 3 次均失败，请检查配置或后端服务。`);
+      }
+    };
+
     ws.onopen = () => {
+      if (connTimeoutRef.current) {
+        clearTimeout(connTimeoutRef.current);
+        connTimeoutRef.current = null;
+      }
       isConnected = true;
       setStatus('connected');
       setSystemError(null);
-      reconnectAttemptsRef.current = 0;
+      
+      // Only reset retry count if connection is stable for 5s
+      stableTimerRef.current = setTimeout(() => {
+        reconnectAttemptsRef.current = 0;
+      }, 5000);
+
       if (!initialCols && xtermRef.current) {
         fitAddonRef.current?.fit();
         const { cols, rows } = xtermRef.current;
@@ -197,27 +256,30 @@ const TerminalSession = React.memo(({
     };
 
     ws.onclose = (event) => {
+      if (connTimeoutRef.current) {
+        clearTimeout(connTimeoutRef.current);
+        connTimeoutRef.current = null;
+      }
+      if (stableTimerRef.current) {
+        clearTimeout(stableTimerRef.current);
+        stableTimerRef.current = null;
+      }
+
       isConnected = false;
-      // Normal close (1000) or we are intentionally closing
       if (event.code === 1000) {
         setStatus('disconnected');
         return;
       }
-
-      // If unexpected close, attempt silent reconnect
-      if (reconnectAttemptsRef.current < 10) {
-        reconnectAttemptsRef.current += 1;
-        setStatus('connecting');
-        reconnectTimerRef.current = setTimeout(() => connect(initialCols, initialRows), 1000 * Math.min(reconnectAttemptsRef.current, 5));
-      } else {
-        setStatus('disconnected');
-        setSystemError(`连接已断开 (代码: ${event.code})。重连多次失败，请检查网络或后端服务。`);
-      }
+      handleFailure({ code: event.code, reason: event.reason || 'WebSocket closed' });
     };
 
-    ws.onerror = () => {
-      isConnected = false;
-      // error usually followed by close, handled in onclose
+    ws.onerror = (err) => {
+      if (connTimeoutRef.current) {
+        clearTimeout(connTimeoutRef.current);
+        connTimeoutRef.current = null;
+      }
+      console.error('[Terminal] WebSocket Error:', err);
+      // handleFailure will be triggered by onclose following error
     };
 
     const writeBuffer: string[] = [];
@@ -249,8 +311,10 @@ const TerminalSession = React.memo(({
           }
           isInitialBuffer = false;
         } else if (payload.type === 'exit') {
-          isConnected = false;
-          setStatus('disconnected');
+          if (isConnected) {
+             isConnected = false;
+             handleFailure({ code: 4009, reason: 'Session Exited' });
+          }
         }
       } catch { /* ignore */ }
     };
