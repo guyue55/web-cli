@@ -146,7 +146,7 @@ body, html, #root {
   width: 36px;
   height: 36px;
   font-size: 18px;
-  margin: 12px;
+  margin: 12px auto;
   border-radius: 50%;
   border: none;
   background: transparent;
@@ -257,6 +257,14 @@ body, html, #root {
   white-space: nowrap;
   overflow: hidden;
   transition: background-color 0.2s;
+  justify-content: flex-start;
+}
+
+.sidebar-wrapper.collapsed .sidebar-item-static {
+  margin: 0 auto 2px;
+  justify-content: center;
+  padding: 8px 0;
+  width: 40px;
 }
 
 .sidebar-item-static:hover { background-color: var(--bg-hover); }

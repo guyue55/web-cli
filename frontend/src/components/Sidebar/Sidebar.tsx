@@ -231,23 +231,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="sidebar-bottom-container" ref={menuRef}>
             {isMenuOpen && (
               <div className="sidebar-floating-menu glass-effect">
-                <div className="menu-item">
+                <div className="menu-item" onClick={() => { /* logic for help */ setIsMenuOpen(false); }}>
                   <span className="material-symbols-outlined">help</span>
                   <span>帮助</span>
                 </div>
-                <div className="menu-item">
+                <div className="menu-item" onClick={() => { /* logic for activity */ setIsMenuOpen(false); }}>
                   <span className="material-symbols-outlined">history</span>
                   <span>活动</span>
+                </div>
+                <div className="menu-item" onClick={() => { /* logic for settings */ setIsMenuOpen(false); }}>
+                  <span className="material-symbols-outlined">settings</span>
+                  <span>设置</span>
                 </div>
               </div>
             )}
             <div 
               className={`sidebar-item-static ${isMenuOpen ? 'active' : ''}`} 
               onClick={() => setIsMenuOpen(!isMenuOpen)}
-              title="设置"
+              title="菜单"
             >
-               <span className="icon-span"><span className="material-symbols-outlined">settings</span></span>
-               {!collapsed && <span>设置</span>}
+               <span className="icon-span">
+                 <span className="material-symbols-outlined">
+                   {isMenuOpen ? 'close' : 'settings'}
+                 </span>
+               </span>
+               {!collapsed && <span>{isMenuOpen ? '关闭' : '设置'}</span>}
             </div>
           </div>
       </div>

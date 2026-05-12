@@ -196,7 +196,8 @@ const TerminalSession = React.memo(({
 
     ws.onclose = (event) => {
       setStatus('disconnected');
-      if (event.code !== 1000) {
+      // Only show error if we are not attempting a reconnect
+      if (event.code !== 1000 && reconnectAttemptsRef.current >= 3) {
         setSystemError(`连接意外断开 (代码: ${event.code})。请检查后端服务状态或尝试重新连接。`);
       }
     };
@@ -204,7 +205,7 @@ const TerminalSession = React.memo(({
     ws.onerror = () => {
       if (reconnectAttemptsRef.current < 3) {
         reconnectAttemptsRef.current += 1;
-        reconnectTimerRef.current = setTimeout(() => connect(initialCols, initialRows), 1000);
+        reconnectTimerRef.current = setTimeout(() => connect(initialCols, initialRows), 1500);
       } else {
         setStatus('disconnected');
         setSystemError('无法建立 WebSocket 连接。执行环境可能已关闭或网络受限。');
@@ -252,7 +253,12 @@ const TerminalSession = React.memo(({
     if (initialPrompt && status === 'connected' && wsRef.current?.readyState === WebSocket.OPEN) {
        const lockKey = `${id}-${initialPrompt}`;
        if (executionLockedRef.current !== lockKey) {
-          wsRef.current.send(JSON.stringify({ type: 'input', data: initialPrompt + '\r' }));
+          // Small delay to ensure backend PTY is fully initialized for input
+          setTimeout(() => {
+            if (wsRef.current?.readyState === WebSocket.OPEN) {
+              wsRef.current.send(JSON.stringify({ type: 'input', data: initialPrompt + '\r' }));
+            }
+          }, 300);
           executionLockedRef.current = lockKey;
        }
     }
@@ -409,10 +415,26 @@ const TerminalSession = React.memo(({
 
   useEffect(() => {
     if (active && xtermRef.current && fitAddonRef.current) {
-      setTimeout(() => {
-        fitAddonRef.current?.fit();
-        xtermRef.current?.focus();
-      }, 100);
+      // Multiple attempts to ensure layout is settled
+      const attemptFit = () => {
+        if (terminalRef.current?.offsetParent && fitAddonRef.current) {
+          fitAddonRef.current.fit();
+          xtermRef.current?.focus();
+          // Sync size if connected
+          if (wsRef.current?.readyState === WebSocket.OPEN && xtermRef.current) {
+             wsRef.current.send(JSON.stringify({ type: 'resize', cols: xtermRef.current.cols, rows: xtermRef.current.rows }));
+          }
+        }
+      };
+
+      attemptFit();
+      const t1 = setTimeout(attemptFit, 100);
+      const t2 = setTimeout(attemptFit, 500); // 2nd attempt for slower layout shifts
+      
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
     }
   }, [active]);
 
