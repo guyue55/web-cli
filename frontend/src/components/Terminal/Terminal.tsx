@@ -421,7 +421,9 @@ const TerminalSession = React.memo(({
     });
 
     term.onScroll(() => {
-      const isBottom = term.buffer.active.viewportY >= term.buffer.active.baseY - 2;
+      // Use a larger buffer (5 lines) and requestAnimationFrame for stability
+      const buffer = 5;
+      const isBottom = term.buffer.active.viewportY >= term.buffer.active.baseY - buffer;
       setHasNewContent(!isBottom);
     });
 

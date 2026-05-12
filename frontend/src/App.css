@@ -1889,39 +1889,6 @@ body, html, #root {
 
 /* Terminal Layout Isolated */
 
-.scroll-bottom-fab {
-  position: absolute;
-  bottom: 24px;
-  right: 24px;
-  background: rgba(66, 133, 244, 0.9);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  padding: 10px 20px;
-  border-radius: 20px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
-  z-index: 100;
-  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-  animation: slideUpFab 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-@keyframes slideUpFab {
-  from { transform: translateY(20px) scale(0.9); opacity: 0; }
-  to { transform: translateY(0) scale(1); opacity: 1; }
-}
-
-.scroll-bottom-fab:hover {
-  transform: translateY(-2px) scale(1.05);
-  background: var(--accent-blue);
-}
-
 /* Tab Coloring System */
 .terminal-tab.tab-color-blue.active { border-top: 2px solid #4285f4 !important; }
 .terminal-tab.tab-color-purple.active { border-top: 2px solid #9b72cb !important; }
@@ -2258,41 +2225,6 @@ body, html, #root {
   color: var(--text-dim);
 }
 
-/* Terminal Layout Isolated */
-
-.scroll-bottom-fab {
-  position: absolute;
-  bottom: 24px;
-  right: 24px;
-  background: rgba(66, 133, 244, 0.9);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  padding: 10px 20px;
-  border-radius: 20px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
-  z-index: 100;
-  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-  animation: slideUpFab 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-@keyframes slideUpFab {
-  from { transform: translateY(20px) scale(0.9); opacity: 0; }
-  to { transform: translateY(0) scale(1); opacity: 1; }
-}
-
-.scroll-bottom-fab:hover {
-  transform: translateY(-2px) scale(1.05);
-  background: var(--accent-blue);
-}
-
 /* Custom XTerm Scrollbar */
 .terminal-inner .xterm-viewport::-webkit-scrollbar {
   width: 6px;
@@ -2558,25 +2490,40 @@ body, html, #root {
   100% { transform: scale(1); filter: brightness(1); }
 }
 
+/* Stable Scroll Bottom FAB (Gemini Web Style) */
 .scroll-bottom-fab {
   position: absolute;
   bottom: 32px;
   left: 50%;
   transform: translateX(-50%);
-  background-color: var(--accent-blue);
+  background: rgba(66, 133, 244, 0.9);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   color: white;
-  border: none;
-  padding: 12px 24px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 10px 24px;
   border-radius: 30px;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 10px;
-  box-shadow: 0 4px 20px rgba(11, 87, 208, 0.4);
+  gap: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
   z-index: 100;
-  animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: slideUpFab 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.scroll-bottom-fab:hover {
+  transform: translateX(-50%) translateY(-2px) scale(1.05);
+  background: var(--accent-blue);
+  box-shadow: 0 12px 32px rgba(11, 87, 208, 0.4);
+}
+
+@keyframes slideUpFab {
+  from { transform: translateX(-50%) translateY(20px) scale(0.9); opacity: 0; }
+  to { transform: translateX(-50%) translateY(0) scale(1); opacity: 1; }
 }
 
 .terminal-overlay-modern {
