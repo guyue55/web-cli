@@ -1,0 +1,25 @@
+services:
+  backend:
+    build:
+      context: .
+      target: backend-runtime
+    environment:
+      PORT: "3001"
+      GEMINI_PATH: "gemini"
+    volumes:
+      - gemini_data:/home/node/.gemini
+      - workspace:/workspace
+    working_dir: /workspace
+
+  caddy:
+    build:
+      context: .
+      target: caddy-runtime
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  gemini_data:
+  workspace:

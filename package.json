@@ -1,3 +1,4 @@
+
 {
   "name": "web-cli-root",
   "private": true,
@@ -9,8 +10,10 @@
   ],
   "scripts": {
     "install:all": "npm install",
+    "build": "npm run build:all",
     "build:all": "npm run build --workspaces --if-present",
     "lint:all": "npm run lint --workspaces --if-present",
+    "start": "npm -w backend run start",
     "dev:backend": "npm run dev -w backend",
     "dev:frontend": "npm run dev -w frontend"
   }

@@ -52,7 +52,7 @@ export class SessionManager {
       ['--skip-trust', '--approval-mode', 'yolo', '--prompt-interactive', ' '] : 
       ['--resume', uuid, '--skip-trust', '--approval-mode', 'yolo', '--prompt-interactive', ' '];
 
-    const geminiPath = '/Users/guyue/.nvm/versions/node/v24.13.0/bin/gemini';
+    const geminiPath = process.env.GEMINI_PATH || 'gemini';
 
     try {
       ptyProcess = pty.spawn(geminiPath, args, {
@@ -99,7 +99,8 @@ def bridge():
 
     if pid == 0:
         try:
-            os.execv(r'${geminiPath}', [r'${geminiPath}'] + ${JSON.stringify(pyArgs)})
+            # Use execvp to allow PATH resolution for the gemini command
+            os.execvp(r'${geminiPath}', [r'${geminiPath}'] + ${JSON.stringify(pyArgs)})
         except Exception as e:
             sys.stderr.write(f"Exec failed: {e}\\n")
             os._exit(1)
@@ -144,59 +145,86 @@ if __name__ == "__main__":
     bridge()
 `.trim();
       
-      console.log(`[SessionManager] Spawning Threaded Binary-Safe Python Bridge...`);
-      const cp = spawn('/usr/bin/python3', ['-u', '-c', pyScript], {
-        cwd: projectPath,
-        env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor', FORCE_COLOR: '1', LANG: 'en_US.UTF-8' } as any,
-        stdio: ['pipe', 'pipe', 'pipe']
-      });
-
-      // Handle stdin error to prevent fatal EPIPE crash
-      cp.stdin?.on('error', (err) => {
-        console.warn(`[SessionManager] Bridge stdin error: ${err.message}`);
-      });
-
+      console.log(`[SessionManager] Spawning Threaded Binary-Safe Python Bridge (Optimized Discovery)...`);
+      
       const decoder = new StringDecoder('utf8');
       let onDataCb: (data: string) => void = () => {};
       let onExitCb: (status: { exitCode: number; signal?: number }) => void = () => {};
-
-      cp.stdout?.on('data', (chunk: Buffer) => {
-        onDataCb(decoder.write(chunk));
-      });
-      cp.stderr?.on('data', (data) => {
-        const msg = data.toString();
-        console.error(`[SessionManager] PTY Bridge Error: ${msg}`);
-        if (!msg.includes('tcgetattr') && !msg.includes('ioctl')) {
-          onDataCb(`\x1b[31m[System Error] ${msg}\x1b[0m`);
-        }
-      });
-      cp.on('error', (err) => {
-        console.error(`[SessionManager] PTY Bridge Failed: ${err}`);
-        onDataCb(`\x1b[31m[Critical Error] Failed to start gemini process: ${err.message}\x1b[0m`);
-        onExitCb({ exitCode: 1 });
-      });
-      cp.on('exit', (code, signal) => onExitCb({ exitCode: code ?? 0, signal: signal ? 1 : undefined as any }));
-
       const sizeFilePath = `/tmp/gemini-term-size-${uuid}.tmp`;
+
+      let activeCp: any = null;
+      let discoveryStep = 1;
+
+      const startBridge = (cmd: string) => {
+        const proc = spawn(cmd, ['-u', '-c', pyScript], {
+          cwd: projectPath,
+          env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor', FORCE_COLOR: '1', LANG: 'en_US.UTF-8' } as any,
+          stdio: ['pipe', 'pipe', 'pipe']
+        });
+
+        proc.stdin?.on('error', (err: any) => console.warn(`[SessionManager] Bridge stdin error: ${err.message}`));
+        
+        proc.stdout?.on('data', (chunk: Buffer) => {
+          if (proc === activeCp) onDataCb(decoder.write(chunk));
+        });
+
+        proc.stderr?.on('data', (data: any) => {
+          const msg = data.toString();
+          
+          // SILENT FAILOVER: Detect broken pyenv/conda shims without notifying frontend
+          if (discoveryStep === 1 && (msg.includes('pyenv: version') || msg.includes('command not found'))) {
+             console.warn(`[SessionManager] Tier 1 environment check failed. Silently switching to Tier 2...`);
+             discoveryStep = 2;
+             proc.kill();
+             activeCp = startBridge('/usr/bin/python3');
+             return;
+          }
+
+          if (proc === activeCp) {
+            console.error(`[SessionManager] PTY Bridge Error: ${msg}`);
+            // Only send error to UI if it's not a standard terminal initialization noise
+            if (!msg.includes('tcgetattr') && !msg.includes('ioctl')) {
+              onDataCb(`\x1b[31m[System Error] ${msg}\x1b[0m`);
+            }
+          }
+        });
+
+        proc.on('error', (err: any) => {
+          if (discoveryStep === 1) {
+            discoveryStep = 2;
+            activeCp = startBridge('/usr/bin/python3');
+          } else {
+            console.error(`[SessionManager] Python discovery exhausted: ${err.message}`);
+            onDataCb(`\x1b[31m[Critical Error] 执行环境启动失败。详细原因: ${err.message}\\x1b[0m`);
+            onExitCb({ exitCode: 1 });
+          }
+        });
+
+        proc.on('exit', (code: any, signal: any) => {
+          if (proc === activeCp) onExitCb({ exitCode: code ?? 0, signal: signal ? 1 : undefined as any });
+        });
+
+        return proc;
+      };
+
+      activeCp = startBridge('python3');
 
       ptyProcess = {
         write: (data: string) => {
           try {
-            if (cp.stdin?.writable) {
-              cp.stdin.write(data);
-            }
+            if (activeCp?.stdin?.writable) activeCp.stdin.write(data);
           } catch (e) {
             console.warn(`[SessionManager] Failed to write to PTY: ${e}`);
           }
         },
         kill: () => {
-          cp.kill();
+          activeCp?.kill();
           try { fs.unlinkSync(sizeFilePath); } catch (e) {}
         },
         resize: (newCols: number, newRows: number) => {
           try {
             fs.writeFileSync(sizeFilePath, `${newRows},${newCols}`);
-            cp.kill('SIGUSR1');
+            activeCp?.kill('SIGUSR1');
           } catch (e) {
             console.warn('[SessionManager] Resize failed', e);
           }

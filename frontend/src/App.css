@@ -1836,25 +1836,74 @@ body, html, #root {
   color: var(--text-dim);
 }
 
-/* Selection Popup - Gemini Web Style */
+/* Selection Popup - Gemini Web Premium */
 .terminal-selection-popup {
   position: fixed;
   z-index: 2500;
-  background: var(--accent-blue);
-  color: white;
-  padding: 6px 16px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  padding: 6px 12px;
   border-radius: 20px;
-  box-shadow: 0 8px 24px rgba(66, 133, 244, 0.4);
-  transform: translate(-50%, -10px);
-  animation: slideUpPopup 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  transform: translate(-50%, -10px);
+  animation: slideUpPopup 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+.dark .terminal-selection-popup {
+  background: rgba(30, 31, 32, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
 }
 
 @keyframes slideUpPopup {
-  from { opacity: 0; transform: translate(-50%, 0); }
+  from { opacity: 0; transform: translate(-50%, 5px); }
   to { opacity: 1; transform: translate(-50%, -10px); }
+}
+
+.terminal-selection-popup button {
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 12px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.terminal-selection-popup button:hover {
+  background: var(--bg-hover);
+  transform: translateY(-1px);
+}
+
+.terminal-selection-popup .popup-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border-subtle);
+  margin: 0 4px;
+}
+
+.terminal-selection-popup .material-symbols-outlined {
+  font-size: 18px;
+  color: var(--text-dim);
+}
+
+.terminal-selection-popup .ai-btn-small {
+  color: #9b72cb !important;
+  font-weight: 700;
+}
+
+.dark .terminal-selection-popup .ai-btn-small {
+  color: #c58af9 !important;
 }
 
 .terminal-footer-status {
@@ -2129,76 +2178,7 @@ body, html, #root {
 .color-circle.green { background: #34a853; }
 .color-circle.red { background: #ea4335; }
 
-/* Selection Popup - Gemini Web Premium */
-.terminal-selection-popup {
-  position: fixed;
-  z-index: 2500;
-  background: rgba(66, 133, 244, 0.95);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  color: white;
-  padding: 6px 16px;
-  border-radius: 24px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  box-shadow: 0 12px 48px rgba(66, 133, 244, 0.4);
-  transform: translate(-50%, 0);
-  animation: slideUpPopup 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-}
-
-@keyframes slideUpPopup {
-  from { opacity: 0; transform: translate(-50%, 15px); }
-  to { opacity: 1; transform: translate(-50%, 0); }
-}
-
-.terminal-selection-popup button {
-  background: none;
-  border: none;
-  color: white;
-  font-size: 13px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  padding: 6px 12px;
-  border-radius: 14px;
-  transition: all 0.2s;
-}
-
-.terminal-selection-popup button:hover {
-  background: rgba(255, 255, 255, 0.2);
-  transform: translateY(-1px);
-}
-
-.popup-divider {
-  width: 1px;
-  height: 18px;
-  background: rgba(255, 255, 255, 0.2);
-  margin: 0 4px;
-}
-
-.ai-btn-small {
-  color: #fff !important;
-  background: linear-gradient(135deg, rgba(155, 114, 203, 0.2), rgba(66, 133, 244, 0.2)) !important;
-}
-
-/* Pulse Glow for AI Perception */
-@keyframes ai-pulse-glow {
-  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(155, 114, 203, 0.4); }
-  50% { transform: scale(1.08); box-shadow: 0 0 20px 6px rgba(66, 133, 244, 0.5); }
-  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(155, 114, 203, 0); }
-}
-
-.terminal-btn-gemini.ai-highlight.error-perceived {
-  animation: ai-pulse-glow 2.5s infinite cubic-bezier(0.4, 0, 0.2, 1);
-  background: linear-gradient(135deg, rgba(66, 133, 244, 0.3), rgba(155, 114, 203, 0.3));
-  color: #9b72cb;
-}
-
-/* Clickable Paths Styles */
+/* End Selection Popup Styles */
 .xterm-link {
   text-decoration: underline;
   text-decoration-style: dashed;
