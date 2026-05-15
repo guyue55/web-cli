@@ -6,6 +6,9 @@ export type HistoryItem = {
     time: string;
     updatedAt: number;
     id: string;
+    pinned?: boolean;
+    archived?: boolean;
+    tags?: string[];
 };
 export interface ProjectEntry {
     path: string;
@@ -38,8 +41,11 @@ export interface ChatMessage {
     role: 'user' | 'assistant';
     content: string;
     timestamp?: string;
+    kind?: 'message' | 'thought' | 'tool_call' | 'system' | 'error';
+    label?: string;
 }
 export interface IPtyProcess {
+    pid: number;
     write: (data: string) => void;
     resize: (cols: number, rows: number) => void;
     onData: (cb: (data: string) => void) => void;
@@ -54,6 +60,10 @@ export interface TerminalProps {
     projectPath: string;
     initialPrompt?: string | null;
     theme?: string;
+    terminalFontSize?: number;
+    mobileHelperDefaultVisible?: boolean;
+    preferredTabId?: string;
+    isVisible?: boolean;
     onSendToChat?: (text: string) => void;
 }
 export interface ISession {
@@ -62,5 +72,10 @@ export interface ISession {
     pty: IPtyProcess;
     buffer: string;
     clients: Set<any>;
+}
+export interface SessionMetadata {
+    pinned?: boolean;
+    archived?: boolean;
+    tags?: string[];
 }
 //# sourceMappingURL=index.d.ts.map

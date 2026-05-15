@@ -619,6 +619,8 @@ const Terminal: React.FC<TerminalProps> = React.memo(({
   theme,
   terminalFontSize,
   mobileHelperDefaultVisible,
+  preferredTabId,
+  isVisible,
   onSendToChat
 }) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -669,6 +671,12 @@ const Terminal: React.FC<TerminalProps> = React.memo(({
       });
     }
   }, [uuid]);
+
+  useEffect(() => {
+    if (!isVisible || !preferredTabId) return;
+    setActiveTabId(preferredTabId);
+    localStorage.setItem('terminal_active_tab_id', preferredTabId);
+  }, [isVisible, preferredTabId]);
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth <= 768 || /Android|iPhone/i.test(navigator.userAgent));

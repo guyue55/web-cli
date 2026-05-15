@@ -62,9 +62,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const workspaceMenuRef = useRef<HTMLDivElement>(null);
+  const sessionMenuRef = useRef<HTMLDivElement>(null);
   const settingsButtonRef = useRef<HTMLDivElement>(null);
   const [menuPosition, setMenuPosition] = useState<{ left: number; bottom: number; width: number } | null>(null);
+  const [sessionMenuState, setSessionMenuState] = useState<{
+    item: HistoryItem;
+    top: number;
+    left: number;
+  } | null>(null);
 
   useEffect(() => {
     localStorage.setItem('gemini-collapsed-projects', JSON.stringify(collapsedProjects));
@@ -73,10 +79,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
-      const clickedInsideMenu = menuRef.current?.contains(target);
+      const clickedInsideWorkspaceMenu = workspaceMenuRef.current?.contains(target);
+      const clickedInsideSessionMenu = sessionMenuRef.current?.contains(target);
       const clickedSettingsButton = settingsButtonRef.current?.contains(target);
-      if (!clickedInsideMenu && !clickedSettingsButton) {
+      if (!clickedInsideWorkspaceMenu && !clickedInsideSessionMenu && !clickedSettingsButton) {
         setIsMenuOpen(false);
+        setSessionMenuState(null);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -115,10 +123,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }));
   };
 
+  const openSessionMenu = (event: React.MouseEvent, item: HistoryItem) => {
+    event.stopPropagation();
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const viewportPadding = 12;
+    setSessionMenuState({
+      item,
+      top: Math.max(
+        viewportPadding,
+        Math.min(rect.bottom + 4, window.innerHeight - 240)
+      ),
+      left: Math.max(
+        viewportPadding,
+        Math.min(rect.right + 6, window.innerWidth - 132 - viewportPadding)
+      ),
+    });
+  };
+
   const handleStartRename = (e: React.MouseEvent, item: HistoryItem) => {
     e.stopPropagation();
     setEditingId(item.id);
     setEditName(isUntitledSessionName(item.name) ? '' : item.name);
+    setSessionMenuState(null);
   };
 
   const handleConfirmRename = async (item: HistoryItem) => {
@@ -130,6 +156,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       await ApiService.renameSession(item.id, item.projectName, editName);
       renameSessionLocal(item.id, editName);
       setEditingId(null);
+      setSessionMenuState(null);
     } catch {
       alert('重命名失败');
     }
@@ -143,6 +170,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       await ApiService.deleteSession(item.id, item.projectPath);
       deleteSessionLocal(item.id);
       clearSessionMetadataLocal(item.projectPath, item.id);
+      setSessionMenuState(null);
     } catch {
       alert('删除失败');
     }
@@ -154,6 +182,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     try {
       const metadata = await ApiService.updateSessionMetadata(item.id, item.projectPath, { pinned: nextPinned });
       updateSessionMetadataLocal(item.projectPath, item.id, metadata);
+      setSessionMenuState(current => current?.item.id === item.id ? null : current);
     } catch {
       alert('固定状态更新失败');
     }
@@ -170,6 +199,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     try {
       const metadata = await ApiService.updateSessionMetadata(item.id, item.projectPath, { archived: nextArchived });
       updateSessionMetadataLocal(item.projectPath, item.id, metadata);
+      setSessionMenuState(current => current?.item.id === item.id ? null : current);
     } catch {
       alert('归档状态更新失败');
     }
@@ -190,6 +220,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     try {
       const metadata = await ApiService.updateSessionMetadata(item.id, item.projectPath, { tags: normalizedTags });
       updateSessionMetadataLocal(item.projectPath, item.id, metadata);
+      setSessionMenuState(null);
     } catch {
       alert('标签更新失败');
     }
@@ -208,6 +239,72 @@ export const Sidebar: React.FC<SidebarProps> = ({
     .flatMap(group => group.items)
     .filter(item => item.pinned && matchesSessionFilter(item))
     .sort((a, b) => b.updatedAt - a.updatedAt);
+
+  const renderSessionRow = (item: HistoryItem, key: string) => {
+    const isActive = activeSessions.includes(`${item.projectPath}:${item.id}`);
+    const displayName = getSessionDisplayName(item);
+    const secondaryLabel = getSessionSecondaryLabel(item);
+    const tags = item.tags || [];
+    const isArchived = Boolean(item.archived);
+    const hoverInfo = `标题: ${displayName}\n时间: ${item.time}\n项目: ${item.projectName}\n路径: ${item.projectPath}`;
+
+    return (
+      <li
+        key={key}
+        className={`session-card ${item.id === selectedSession?.id ? 'active' : ''} ${editingId === item.id ? 'editing' : ''} ${item.pinned ? 'pinned' : ''}`}
+        onClick={() => editingId !== item.id && onSelectSession(item)}
+        onKeyDown={(e) => {
+          if (editingId === item.id) return;
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onSelectSession(item);
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-current={item.id === selectedSession?.id ? 'page' : undefined}
+        title={hoverInfo}
+      >
+        {editingId === item.id ? (
+          <input
+            className="rename-input"
+            autoFocus
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            onBlur={() => handleConfirmRename(item)}
+            onKeyDown={(e) => handleKeyDown(e, item)}
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <>
+            <div className="session-copy">
+              <div className="history-title-row">
+                <span className="history-name">{displayName}</span>
+                {item.pinned && <span className="session-state-badge">已固定</span>}
+                {isArchived && <span className="session-state-badge archived">已归档</span>}
+              </div>
+              <span className="history-meta">{secondaryLabel}</span>
+              {tags.length > 0 && (
+                <div className="session-tag-row">
+                  {tags.map(tag => <span key={tag} className="session-tag">{tag}</span>)}
+                </div>
+              )}
+            </div>
+            <div className="session-card-trailing">
+              {isActive && <span className="active-status-dot-mini session-active-indicator" />}
+              <button
+                className="session-more-btn"
+                aria-label={`${displayName} 更多操作`}
+                onClick={(event) => openSessionMenu(event, item)}
+              >
+                <span className="material-symbols-outlined">more_horiz</span>
+              </button>
+            </div>
+          </>
+        )}
+      </li>
+    );
+  };
 
   return (
     <div ref={sidebarRef} className={`sidebar-wrapper ${collapsed ? 'collapsed' : ''}`}>
@@ -278,49 +375,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <>
             <div className="sidebar-section-label">已固定</div>
             <ul className="session-list pinned-session-list">
-              {pinnedItems.map((item) => {
-                const displayName = getSessionDisplayName(item);
-                const secondaryLabel = getSessionSecondaryLabel(item);
-                const isActive = activeSessions.includes(`${item.projectPath}:${item.id}`);
-                const tags = item.tags || [];
-
-                return (
-                  <li
-                    key={`pinned-${item.projectPath}-${item.id}`}
-                    className={`session-card pinned ${item.id === selectedSession?.id ? 'active' : ''}`}
-                    onClick={() => onSelectSession(item)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        onSelectSession(item);
-                      }
-                    }}
-                  >
-                    <div className="session-copy">
-                      <span className="history-name">{displayName}</span>
-                      <span className="history-meta">{secondaryLabel}</span>
-                      {tags.length > 0 && (
-                        <div className="session-tag-row">
-                          {tags.map(tag => <span key={tag} className="session-tag">{tag}</span>)}
-                        </div>
-                      )}
-                    </div>
-                    <div className="session-actions">
-                      <button className="rename-btn pin-btn active" aria-label={`取消固定 ${displayName}`} onClick={(e) => togglePinnedSession(e, item)}>
-                        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>keep</span>
-                      </button>
-                      <button className="rename-btn archive-btn" aria-label={`归档 ${displayName}`} onClick={(e) => toggleArchivedSession(e, item)}>
-                        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>archive</span>
-                      </button>
-                      {isActive && (
-                        <div className="active-dot" style={{ flexShrink: 0, width: 6, height: 6, backgroundColor: '#10b981', borderRadius: '50%', boxShadow: '0 0 4px #10b981' }} />
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
+              {pinnedItems.map((item) => renderSessionRow(item, `pinned-${item.projectPath}-${item.id}`))}
             </ul>
           </>
         )}
@@ -394,77 +449,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <div className={`project-session-container ${isProjectCollapsed ? 'is-collapsed' : ''}`}>
                   <div className="project-session-inner">
                     <ul className="session-list">
-                      {visibleItems.map((item) => {
-                        const isActive = activeSessions.includes(`${item.projectPath}:${item.id}`);
-                        const displayName = getSessionDisplayName(item);
-                        const secondaryLabel = getSessionSecondaryLabel(item);
-                        const tags = item.tags || [];
-                        const isArchived = Boolean(item.archived);
-                        const hoverInfo = `标题: ${displayName}\n时间: ${item.time}\n项目: ${item.projectName}\n路径: ${item.projectPath}`;
-                        
-                        return (
-                          <li 
-                            key={item.id} 
-                            className={`session-card ${item.id === selectedSession?.id ? 'active' : ''} ${editingId === item.id ? 'editing' : ''}`}
-                            onClick={() => editingId !== item.id && onSelectSession(item)}
-                            onKeyDown={(e) => {
-                              if (editingId === item.id) return;
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault();
-                                onSelectSession(item);
-                              }
-                            }}
-                            role="button"
-                            tabIndex={0}
-                            aria-current={item.id === selectedSession?.id ? 'page' : undefined}
-                            title={hoverInfo}
-                          >
-                            {editingId === item.id ? (
-                              <input 
-                                className="rename-input"
-                                autoFocus
-                                value={editName}
-                                onChange={(e) => setEditName(e.target.value)}
-                                onBlur={() => handleConfirmRename(item)}
-                                onKeyDown={(e) => handleKeyDown(e, item)}
-                                onClick={(e) => e.stopPropagation()}
-                              />
-                            ) : (
-                              <>
-                                <div className="session-copy">
-                                  <span className="history-name">{displayName}</span>
-                                  <span className="history-meta">{secondaryLabel}</span>
-                                  {tags.length > 0 && (
-                                    <div className="session-tag-row">
-                                      {tags.map(tag => <span key={tag} className="session-tag">{tag}</span>)}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="session-actions">
-                                   <button className="rename-btn" aria-label={`重命名 ${displayName}`} onClick={(e) => handleStartRename(e, item)}>
-                                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit</span>
-                                   </button>
-                                   <button className="rename-btn" aria-label={`编辑 ${displayName} 的标签`} onClick={(e) => editSessionTags(e, item)}>
-                                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>sell</span>
-                                   </button>
-                                   <button className="rename-btn danger" aria-label={`删除 ${displayName}`} onClick={(e) => handleDeleteSession(e, item)}>
-                                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>delete</span>
-                                   </button>
-                                   <button className={`rename-btn pin-btn ${item.pinned ? 'active' : ''}`} aria-label={`${item.pinned ? '取消固定' : '固定'} ${displayName}`} onClick={(e) => togglePinnedSession(e, item)}>
-                                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>keep</span>
-                                   </button>
-                                   <button className={`rename-btn archive-btn ${isArchived ? 'active' : ''}`} aria-label={`${isArchived ? '取消归档' : '归档'} ${displayName}`} onClick={(e) => toggleArchivedSession(e, item)}>
-                                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>archive</span>
-                                   </button>
-                                   {isActive && (
-                                     <div className="active-dot" style={{ flexShrink: 0, width: 6, height: 6, backgroundColor: '#10b981', borderRadius: '50%', boxShadow: '0 0 4px #10b981' }} />
-                                   )}
-                                </div>
-                              </>
-                            )}
-                          </li>
-                        );
-                      })}
+                      {visibleItems.map((item) => renderSessionRow(item, item.id))}
                     </ul>
                   </div>
                 </div>
@@ -510,8 +495,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {isMenuOpen && menuPosition && createPortal(
         <div
-          ref={menuRef}
-          className="sidebar-floating-menu glass-effect"
+          ref={workspaceMenuRef}
+          className="sidebar-floating-menu"
           style={{
             position: 'fixed',
             left: menuPosition.left,
@@ -531,6 +516,42 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="menu-item" onClick={() => { onOpenPanel('settings'); setIsMenuOpen(false); }}>
             <span className="material-symbols-outlined">settings</span>
             <span>设置</span>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {sessionMenuState && createPortal(
+        <div
+          ref={sessionMenuRef}
+          className="session-action-menu"
+          style={{
+            position: 'fixed',
+            top: sessionMenuState.top,
+            left: sessionMenuState.left,
+          }}
+        >
+          <div className="menu-item" onClick={(event) => handleStartRename(event, sessionMenuState.item)}>
+            <span className="material-symbols-outlined">edit</span>
+            <span>重命名</span>
+          </div>
+          <div className="menu-item" onClick={(event) => editSessionTags(event, sessionMenuState.item)}>
+            <span className="material-symbols-outlined">sell</span>
+            <span>编辑标签</span>
+          </div>
+          <div className="menu-divider" />
+          <div className="menu-item" onClick={(event) => togglePinnedSession(event, sessionMenuState.item)}>
+            <span className="material-symbols-outlined">keep</span>
+            <span>{sessionMenuState.item.pinned ? '取消固定' : '固定会话'}</span>
+          </div>
+          <div className="menu-item" onClick={(event) => toggleArchivedSession(event, sessionMenuState.item)}>
+            <span className="material-symbols-outlined">archive</span>
+            <span>{sessionMenuState.item.archived ? '取消归档' : '归档会话'}</span>
+          </div>
+          <div className="menu-divider" />
+          <div className="menu-item danger" onClick={(event) => handleDeleteSession(event, sessionMenuState.item)}>
+            <span className="material-symbols-outlined">delete</span>
+            <span>删除</span>
           </div>
         </div>,
         document.body

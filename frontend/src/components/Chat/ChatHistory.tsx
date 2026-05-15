@@ -50,23 +50,59 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [expandedProcessGroups, setExpandedProcessGroups] = useState<Record<string, boolean>>({});
 
-  // Group consecutive plain messages by role while preserving structured events.
+  type MessageGroup = {
+    type: 'message';
+    role: string;
+    content: string;
+    timestamp?: string;
+    kind?: ChatMessage['kind'];
+  };
+
+  type ProcessEntry = {
+    role: string;
+    content: string;
+    timestamp?: string;
+    kind: 'thought' | 'tool_call';
+    label?: string;
+  };
+
+  type ProcessGroup = {
+    type: 'process';
+    id: string;
+    items: ProcessEntry[];
+  };
+
+  type EventGroup = {
+    type: 'event';
+    role: string;
+    content: string;
+    timestamp?: string;
+    kind?: Exclude<ChatMessage['kind'], 'message' | 'thought' | 'tool_call'>;
+    label?: string;
+  };
+
   const groupedTranscript = useMemo(() => {
-    const groups: Array<{
-      role: string;
-      content: string;
-      timestamp?: string;
-      kind?: ChatMessage['kind'];
-      label?: string;
-    }> = [];
+    const groups: Array<MessageGroup | ProcessGroup | EventGroup> = [];
+    let pendingProcessItems: ProcessEntry[] = [];
+
+    const flushProcessGroup = () => {
+      if (pendingProcessItems.length === 0) return;
+      groups.push({
+        type: 'process',
+        id: `${pendingProcessItems[0].timestamp || 'process'}-${groups.length}`,
+        items: pendingProcessItems,
+      });
+      pendingProcessItems = [];
+    };
 
     transcript.forEach((msg) => {
       const lastGroup = groups[groups.length - 1];
       const msgContent = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
 
-      if (msg.kind && msg.kind !== 'message') {
-        groups.push({
+      if (msg.kind === 'thought' || msg.kind === 'tool_call') {
+        pendingProcessItems.push({
           role: msg.role,
           content: msgContent,
           timestamp: msg.timestamp,
@@ -76,20 +112,35 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
         return;
       }
 
-      if (lastGroup && lastGroup.role === msg.role && (!lastGroup.kind || lastGroup.kind === 'message')) {
+      flushProcessGroup();
+
+      if (msg.kind && msg.kind !== 'message') {
+        groups.push({
+          type: 'event',
+          role: msg.role,
+          content: msgContent,
+          timestamp: msg.timestamp,
+          kind: msg.kind,
+          label: msg.label,
+        });
+        return;
+      }
+
+      if (lastGroup && lastGroup.type === 'message' && lastGroup.role === msg.role && (!lastGroup.kind || lastGroup.kind === 'message')) {
         lastGroup.content += '\n\n' + msgContent;
       } else {
-        groups.push({ role: msg.role, content: msgContent, timestamp: msg.timestamp, kind: 'message' });
+        groups.push({ type: 'message', role: msg.role, content: msgContent, timestamp: msg.timestamp, kind: 'message' });
       }
     });
 
+    flushProcessGroup();
     return groups;
   }, [transcript]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     if (!isLoading && transcript.length > 0) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      bottomRef.current?.scrollIntoView({ behavior: 'auto' });
     }
   }, [transcript.length, isLoading]);
 
@@ -114,6 +165,19 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
     alert('消息已复制到剪贴板');
   };
 
+  const getProcessSummary = (items: ProcessEntry[]) => {
+    const thoughtCount = items.filter(item => item.kind === 'thought').length;
+    const toolCount = items.filter(item => item.kind === 'tool_call').length;
+    const parts = [];
+    if (thoughtCount > 0) parts.push(`${thoughtCount} 条思考`);
+    if (toolCount > 0) parts.push(`${toolCount} 次处理`);
+    return parts.join(' · ');
+  };
+
+  const getProcessSnippet = (content: string) => {
+    return content.replace(/\s+/g, ' ').trim().slice(0, 80);
+  };
+
   return (
     <div className="content-area" onScroll={handleScroll} ref={containerRef}>
       <div className="transcript-container">
@@ -125,7 +189,45 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
         
         <div className="chat-flow">
           {groupedTranscript.map((msg, i) => {
-            if (msg.kind && msg.kind !== 'message') {
+            if (msg.type === 'process') {
+              const expanded = Boolean(expandedProcessGroups[msg.id]);
+              return (
+                <div key={msg.id} className={`transcript-process-group ${expanded ? 'expanded' : ''}`}>
+                  <button
+                    className="transcript-process-toggle"
+                    onClick={() => setExpandedProcessGroups(prev => ({ ...prev, [msg.id]: !expanded }))}
+                    aria-expanded={expanded}
+                  >
+                    <div className="transcript-process-summary">
+                      <span className="transcript-process-title">思考与处理过程</span>
+                      <span className="transcript-process-meta">{getProcessSummary(msg.items)}</span>
+                    </div>
+                    <span className="transcript-process-preview">
+                      {msg.items.slice(0, 2).map(item => getProcessSnippet(item.content || item.label || '')).filter(Boolean).join(' · ')}
+                    </span>
+                    <span className="material-symbols-outlined transcript-process-chevron">expand_more</span>
+                  </button>
+
+                  {expanded && (
+                    <div className="transcript-process-body">
+                      {msg.items.map((item, itemIndex) => (
+                        <div key={`${msg.id}-${itemIndex}`} className={`transcript-process-item ${item.kind}`}>
+                          <div className="transcript-process-item-header">
+                            <span className="transcript-process-item-label">{item.label || (item.kind === 'thought' ? '思考' : '处理')}</span>
+                            {item.timestamp && <span className="transcript-process-item-time">{formatTime(item.timestamp)}</span>}
+                          </div>
+                          <div className="transcript-process-item-body markdown-body">
+                            <ReactMarkdown components={{ pre: CodeBlock }}>{item.content}</ReactMarkdown>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            if (msg.type === 'event' && msg.kind) {
               return (
                 <div key={i} className={`transcript-event ${msg.kind}`}>
                   <div className="transcript-event-header">

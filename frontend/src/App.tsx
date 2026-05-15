@@ -90,48 +90,24 @@ function App() {
     if (mode && selectedSession) {
       markTerminalStarted(selectedSession.id);
     }
-    // View Transitions API (2026 standard)
-    if (document.startViewTransition) {
-       // View Transitions API (2026 standard)
-       document.startViewTransition(() => setIsLiveMode(mode));
-    } else {
-       setIsLiveMode(mode);
-    }
+    setIsLiveMode(mode);
   };
 
   const handleSelectSession = (session: HistoryItem) => {
-    const update = () => {
-      setSelectedSession(session);
-      localStorage.setItem('last_session_v2', JSON.stringify(session));
-      setIsLiveMode(false);
-      setInitialPrompt(null);
-      setWorkspacePanelMode(null);
-    };
-    // View Transitions API (2026 standard)
-    if (document.startViewTransition) {
-       // View Transitions API (2026 standard)
-       document.startViewTransition(update);
-    } else {
-       update();
-    }
+    setSelectedSession(session);
+    localStorage.setItem('last_session_v2', JSON.stringify(session));
+    setIsLiveMode(false);
+    setInitialPrompt(null);
+    setWorkspacePanelMode(null);
     if (window.innerWidth <= 768) setIsSidebarCollapsed(true);
   };
 
   const handleNewChat = () => {
-    const update = () => {
-      setSelectedSession(null);
-      localStorage.removeItem('last_session_v2');
-      setIsLiveMode(false);
-      setInitialPrompt(null);
-      setWorkspacePanelMode(null);
-    };
-    // View Transitions API (2026 standard)
-    if (document.startViewTransition) {
-       // View Transitions API (2026 standard)
-       document.startViewTransition(update);
-    } else {
-       update();
-    }
+    setSelectedSession(null);
+    localStorage.removeItem('last_session_v2');
+    setIsLiveMode(false);
+    setInitialPrompt(null);
+    setWorkspacePanelMode(null);
   };
 
   const handlePromptSubmit = (text: string) => {
@@ -241,6 +217,8 @@ function App() {
                       theme={theme}
                       terminalFontSize={terminalFontSize}
                       mobileHelperDefaultVisible={mobileHelperDefaultVisible}
+                      preferredTabId={selectedSession.id}
+                      isVisible={isLiveMode}
                       onSendToChat={handlePromptSubmit}
                     />
                   </Suspense>
