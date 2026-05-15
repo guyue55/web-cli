@@ -1,10 +1,19 @@
 import React from 'react';
+import type { ProjectEntry } from '../../hooks/useSessions';
 
 interface WelcomeScreenProps {
   onHandlePromptSubmit: (cmd: string) => void;
+  projects: ProjectEntry[];
+  selectedProjectPath: string;
+  onProjectChange: (projectPath: string) => void;
 }
 
-export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onHandlePromptSubmit }) => {
+export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
+  onHandlePromptSubmit,
+  projects,
+  selectedProjectPath,
+  onProjectChange
+}) => {
   const actions = [
     {
       title: '开始新会话',
@@ -41,6 +50,30 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onHandlePromptSubm
           </div>
           <h1>欢迎使用 Gemini Web CLI</h1>
           <p>智能、快速、可视化的终端执行环境</p>
+        </div>
+
+        <div className="welcome-project-picker">
+          <div className="project-picker-copy">
+            <span className="material-symbols-outlined">folder_managed</span>
+            <div>
+              <span className="project-picker-label">新会话项目</span>
+              <strong>{projects.find(project => project.path === selectedProjectPath)?.name || 'default'}</strong>
+            </div>
+          </div>
+          <select
+            aria-label="选择新会话项目"
+            value={selectedProjectPath}
+            onChange={(event) => onProjectChange(event.target.value)}
+            disabled={projects.length === 0}
+          >
+            {projects.length === 0 ? (
+              <option value={selectedProjectPath}>default</option>
+            ) : projects.map((project) => (
+              <option key={project.path} value={project.path}>
+                {project.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="quick-actions-grid">

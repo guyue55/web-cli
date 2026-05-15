@@ -90,6 +90,7 @@ export const TerminalHeader = React.memo(({
            <button 
              className={`terminal-btn-gemini premium-ai-btn ${errorPerceived ? 'error-pulse' : ''}`} 
              title={errorPerceived ? "发现潜在错误，交给 Gemini 分析" : "分析当前上下文"} 
+             aria-label={errorPerceived ? "发现潜在错误，交给 Gemini 分析" : "分析当前终端上下文"}
              onClick={(e) => { e.stopPropagation(); onExplain(); setErrorPerceived(false); }}
            >
              <span className="material-symbols-outlined">auto_awesome</span>
@@ -97,6 +98,7 @@ export const TerminalHeader = React.memo(({
            <button 
              className={`terminal-btn-gemini ${isPaletteOpen ? 'active' : ''}`}
              title="指令历史 (Cmd/Ctrl+P)"
+             aria-label="打开指令历史"
              onClick={(e) => { e.stopPropagation(); onTogglePalette(); }}
            >
              <span className="material-symbols-outlined">auto_fix_high</span>
@@ -122,21 +124,22 @@ export const TerminalHeader = React.memo(({
              />
              <div className="search-count">{searchMatches.total > 0 ? '匹配' : '无结果'}</div>
              <div className="search-nav-btns">
-               <button onClick={() => onSearch(searchQuery, 'prev', false)} title="上一个 (Shift+Enter)"><IconArrowUp /></button>
-               <button onClick={() => onSearch(searchQuery, 'next', false)} title="下一个 (Enter)"><IconArrowDown /></button>
+               <button onClick={() => onSearch(searchQuery, 'prev', false)} title="上一个 (Shift+Enter)" aria-label="查找上一个"><IconArrowUp /></button>
+               <button onClick={() => onSearch(searchQuery, 'next', false)} title="下一个 (Enter)" aria-label="查找下一个"><IconArrowDown /></button>
              </div>
-             <button className="search-close-btn" onClick={onToggleSearch} title="关闭 (Esc)"><IconInterrupt /></button>
+             <button className="search-close-btn" onClick={onToggleSearch} title="关闭 (Esc)" aria-label="关闭终端搜索"><IconInterrupt /></button>
            </div>
          )}
 
          <div className="action-button-group">
-           <button className="terminal-btn-gemini" title="中断 (Ctrl+C)" onClick={onInterrupt}><IconInterrupt /></button>
-           <button className="terminal-btn-gemini" title="重置终端" onClick={onClear}><IconClear /></button>
+           <button className="terminal-btn-gemini" title="中断 (Ctrl+C)" aria-label="中断当前终端任务" onClick={onInterrupt}><IconInterrupt /></button>
+           <button className="terminal-btn-gemini" title="重置终端" aria-label="清除终端屏幕" onClick={onClear}><IconClear /></button>
          </div>
 
          {isMobile && (
            <button 
              className={`terminal-btn-gemini ${isHelperVisible ? 'active' : ''}`}
+             aria-label={isHelperVisible ? '隐藏移动端辅助键' : '显示移动端辅助键'}
              onClick={onToggleHelper}
            >
              <span className="material-symbols-outlined">keyboard</span>
@@ -144,8 +147,8 @@ export const TerminalHeader = React.memo(({
          )}
 
          <div className="action-button-group">
-           <button className="terminal-btn-gemini" onClick={onToggleFocus}>{isFocusMode ? <IconShrink /> : <IconExpand />}</button>
-           <button className="terminal-btn-official-accent" onClick={onRestart}><IconRefresh /></button>
+           <button className="terminal-btn-gemini" aria-label={isFocusMode ? '退出专注模式' : '进入专注模式'} onClick={onToggleFocus}>{isFocusMode ? <IconShrink /> : <IconExpand />}</button>
+           <button className="terminal-btn-official-accent" aria-label="重连或重启会话" onClick={onRestart}><IconRefresh /></button>
          </div>
       </div>
     </div>

@@ -4,6 +4,7 @@ import { StringDecoder } from 'string_decoder';
 import { type IPtyProcess } from '@web-cli/shared';
 import { getPythonBridgeScript } from './PythonBridge.js';
 import fs from 'fs';
+import { SecurityConfig } from '../config/SecurityConfig.js';
 
 export class PTYFactory {
   static create(
@@ -14,9 +15,7 @@ export class PTYFactory {
     isNew: boolean,
     geminiPath: string
   ): IPtyProcess {
-    const args = isNew ? 
-      ['--skip-trust', '--approval-mode', 'yolo', '--prompt-interactive', ' '] : 
-      ['--resume', uuid, '--skip-trust', '--approval-mode', 'yolo', '--prompt-interactive', ' '];
+    const args = SecurityConfig.geminiArgs(isNew, uuid);
 
     try {
       const ptyProcess = pty.spawn(geminiPath, args, {
@@ -41,9 +40,7 @@ export class PTYFactory {
     isNew: boolean,
     geminiPath: string
   ): IPtyProcess {
-    const pyArgs = isNew ? 
-      ['--skip-trust', '--approval-mode', 'yolo', '--prompt-interactive', ' '] : 
-      ['--resume', uuid, '--skip-trust', '--approval-mode', 'yolo', '--prompt-interactive', ' '];
+    const pyArgs = SecurityConfig.geminiArgs(isNew, uuid);
     
     const pyScript = getPythonBridgeScript(uuid, geminiPath, pyArgs, rows, cols);
     const decoder = new StringDecoder('utf8');
@@ -128,7 +125,10 @@ export class PTYFactory {
     activeCp = startBridge('python3');
 
     return {
-      write: (data: string) => { if (activeCp?.stdin?.writable) activeCp.stdin.write(data); },
+      pid: activeCp.pid || 0,
+      write: (data: string) => {
+        if (activeCp.stdin?.writable) activeCp.stdin.write(data);
+      },
       kill: () => { activeCp?.kill(); },
       resize: (cols: number, rows: number) => {
          const sizeFilePath = `/tmp/gemini-term-size-${uuid}.tmp`;

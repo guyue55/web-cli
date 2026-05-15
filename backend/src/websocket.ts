@@ -2,11 +2,23 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { IncomingMessage } from 'http';
 import { SessionManager } from './managers/SessionManager.js';
 import { GeminiDiscovery } from './services/GeminiDiscovery.js';
+import { isWsAuthorized } from './middleware/auth.js';
+import { isOriginAllowed } from './utils/originGuard.js';
+import { assertAllowedPath } from './utils/pathGuard.js';
 
 export function setupWebSocket(wss: WebSocketServer) {
   wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
     const url = new URL(req.url || '', `http://${req.headers.host}`);
     const pathname = url.pathname;
+
+    if (!isOriginAllowed(req.headers.origin)) {
+      ws.close(1008, 'Origin not allowed');
+      return;
+    }
+    if (!isWsAuthorized(req, url)) {
+      ws.close(1008, 'Unauthorized');
+      return;
+    }
 
     // Route 1: Discovery (Streaming scan)
     if (pathname === '/discovery' || pathname === '/ws/discovery') {
@@ -17,11 +29,20 @@ export function setupWebSocket(wss: WebSocketServer) {
 
     // Route 2: Terminal Session (Resume by UUID)
     const uuid = url.searchParams.get('uuid');
-    const projectPath = url.searchParams.get('projectPath');
+    const projectPathParam = url.searchParams.get('projectPath');
     const cols = parseInt(url.searchParams.get('cols') || '100');
     const rows = parseInt(url.searchParams.get('rows') || '30');
 
-    if (!uuid || !projectPath) {
+    if (!uuid || !projectPathParam) {
+      return;
+    }
+
+    let projectPath: string;
+    try {
+      projectPath = assertAllowedPath(projectPathParam, 'projectPath');
+    } catch (err) {
+      ws.send(JSON.stringify({ type: 'output', data: `\r\n\x1b[31m[Error] ${(err as Error).message}\x1b[0m\r\n` }));
+      ws.close(1008, 'Workspace path not allowed');
       return;
     }
 

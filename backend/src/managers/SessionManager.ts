@@ -1,17 +1,34 @@
 import { WebSocket } from 'ws';
 import { type ISession } from '@web-cli/shared';
 import { PTYFactory } from './PTYFactory.js';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import { assertAllowedPath } from '../utils/pathGuard.js';
+
+const execAsync = promisify(exec);
 
 export class SessionManager {
   private static sessions = new Map<string, ISession>();
   private static timeouts = new Map<string, NodeJS.Timeout>();
+
+  private static async hasChildProcesses(pid: number): Promise<boolean> {
+    try {
+      // pgrep -P <pid> returns PIDs of child processes. 
+      // This works on macOS (Darwin) and Linux.
+      const { stdout } = await execAsync(`pgrep -P ${pid}`);
+      return stdout.trim().length > 0;
+    } catch {
+      return false;
+    }
+  }
 
   static getSessionKey(projectPath: string, uuid: string): string {
     return `${projectPath}:${uuid}`;
   }
 
   static getOrCreateSession(uuid: string, projectPath: string, cols: number = 100, rows: number = 30): ISession {
-    const sessionKey = this.getSessionKey(projectPath, uuid);
+    const safeProjectPath = assertAllowedPath(projectPath, 'projectPath');
+    const sessionKey = this.getSessionKey(safeProjectPath, uuid);
     
     // Clear any existing cleanup timeout if client returns
     if (this.timeouts.has(sessionKey)) {
@@ -27,14 +44,14 @@ export class SessionManager {
     }
 
     const isNew = uuid.startsWith('new-');
-    console.log(`[SessionManager] ${isNew ? 'Creating NEW' : 'Resuming'} Gemini session at ${projectPath} (${cols}x${rows})`);
+    console.log(`[SessionManager] ${isNew ? 'Creating NEW' : 'Resuming'} Gemini session at ${safeProjectPath} (${cols}x${rows})`);
     
     const geminiPath = process.env.GEMINI_PATH || 'gemini';
-    const ptyProcess = PTYFactory.create(uuid, projectPath, cols, rows, isNew, geminiPath);
+    const ptyProcess = PTYFactory.create(uuid, safeProjectPath, cols, rows, isNew, geminiPath);
 
     const session: ISession = {
       id: uuid,
-      projectPath,
+      projectPath: safeProjectPath,
       pty: ptyProcess,
       buffer: '',
       clients: new Set<WebSocket>()
@@ -93,17 +110,34 @@ export class SessionManager {
     if (session) {
       session.clients.delete(ws);
       
-      // If no clients left, schedule session destruction in 1 minute
+      // If no clients left, schedule session destruction check
       if (session.clients.size === 0) {
-        console.log(`[SessionManager] No clients left for ${sessionKey}. Scheduling destruction in 1m.`);
-        const timeout = setTimeout(() => {
+        const cleanup = async () => {
+          const s = this.sessions.get(sessionKey);
+          if (!s || s.clients.size > 0) {
+            // Client returned or session already gone
+            this.timeouts.delete(sessionKey);
+            return;
+          }
+
+          const hasChildren = await this.hasChildProcesses(s.pty.pid);
+          if (hasChildren) {
+            console.log(`[SessionManager] Session ${sessionKey} has active child processes. Postponing cleanup for 1m.`);
+            const nextTimeout = setTimeout(cleanup, 1 * 60 * 1000);
+            this.timeouts.set(sessionKey, nextTimeout);
+            return;
+          }
+
           console.log(`[SessionManager] Cleaning up idle session: ${sessionKey}`);
-          if (session.pty && session.pty.kill) {
-             session.pty.kill();
+          if (s.pty && s.pty.kill) {
+             s.pty.kill();
           }
           this.sessions.delete(sessionKey);
           this.timeouts.delete(sessionKey);
-        }, 1 * 60 * 1000);
+        };
+
+        console.log(`[SessionManager] No clients left for ${sessionKey}. Scheduling idle check in 1m.`);
+        const timeout = setTimeout(cleanup, 1 * 60 * 1000);
         this.timeouts.set(sessionKey, timeout);
       }
     }

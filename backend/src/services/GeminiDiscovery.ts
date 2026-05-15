@@ -81,29 +81,37 @@ export class GeminiDiscovery {
                 uuid = (match ? match[1] : null) || file.replace('.jsonl', '');
               }
 
-              // 2. Find first user message for session name (look in the prefix first)
+              // 2. Find first message for session name (look in the prefix first)
               if (sessionName === 'Untitled Session') {
+                let firstGemini = '';
                 for (let i = 1; i < lines.length; i++) {
                   const line = lines[i];
                   if (!line || !line.trim()) continue;
                   try {
                     const entry = JSON.parse(line);
-                    if (entry.type === 'user' && entry.content) {
-                      let text = '';
-                      if (typeof entry.content === 'string') {
-                        text = entry.content;
-                      } else if (Array.isArray(entry.content)) {
-                        text = entry.content.map((p: any) => p.text || '').join('');
-                      }
-                      if (text.trim()) {
-                        sessionName = text.trim();
-                        if (sessionName.length > 50) sessionName = sessionName.substring(0, 47) + '...';
-                        break; 
-                      }
+                    let text = '';
+                    if (typeof entry.content === 'string') {
+                      text = entry.content;
+                    } else if (Array.isArray(entry.content)) {
+                      text = entry.content.map((p: any) => p.text || '').join('');
+                    }
+
+                    if (entry.type === 'user' && text.trim()) {
+                      sessionName = text.trim();
+                      break; 
+                    }
+                    if (entry.type === 'gemini' && text.trim() && !firstGemini) {
+                      firstGemini = text.trim();
                     }
                   } catch (e) {
                     // Ignore partial lines
                   }
+                }
+                if (sessionName === 'Untitled Session' && firstGemini) {
+                  sessionName = firstGemini;
+                }
+                if (sessionName !== 'Untitled Session' && sessionName.length > 50) {
+                  sessionName = sessionName.substring(0, 47) + '...';
                 }
               }
 

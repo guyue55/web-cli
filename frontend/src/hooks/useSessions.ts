@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import type { HistoryItem, ProjectEntry } from '@web-cli/shared';
+import type { HistoryItem, ProjectEntry, SessionMetadata } from '@web-cli/shared';
 import { ApiService } from '../services/ApiService';
 
 export type { HistoryItem, ProjectEntry };
@@ -8,6 +8,7 @@ export function useSessions() {
   const [activeSessions, setActiveSessions] = useState<string[]>([]);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
+  const [sessionMetadata, setSessionMetadata] = useState<Record<string, SessionMetadata>>({});
   const [isDiscovering, setIsDiscovering] = useState(true);
 
   useEffect(() => {
@@ -17,7 +18,14 @@ export function useSessions() {
         setActiveSessions(data);
       } catch { /* ignore */ }
     };
+    const fetchMetadata = async () => {
+      try {
+        const data = await ApiService.getSessionMetadata();
+        setSessionMetadata(data);
+      } catch { /* ignore */ }
+    };
     fetchActive();
+    fetchMetadata();
     const interval = setInterval(fetchActive, 10000);
 
     const closeDiscovery = ApiService.connectDiscovery((msg) => {
@@ -61,12 +69,15 @@ export function useSessions() {
 
     // Populate and track latest update
     history.forEach(item => {
+      const key = `${item.projectPath}:${item.id}`;
+      const metadata = sessionMetadata[key] || {};
+      const hydratedItem: HistoryItem = { ...item, ...metadata };
       if (!groups[item.projectName]) {
         groups[item.projectName] = { items: [], latestUpdate: 0 };
       }
-      groups[item.projectName].items.push(item);
-      if (item.updatedAt > groups[item.projectName].latestUpdate) {
-        groups[item.projectName].latestUpdate = item.updatedAt;
+      groups[item.projectName].items.push(hydratedItem);
+      if (hydratedItem.updatedAt > groups[item.projectName].latestUpdate) {
+        groups[item.projectName].latestUpdate = hydratedItem.updatedAt;
       }
     });
 
@@ -80,10 +91,37 @@ export function useSessions() {
       .sort(([, a], [, b]) => b.latestUpdate - a.latestUpdate)
       .map(([name, group]) => ({ name, items: group.items }));
 
-  }, [projects, history]);
+  }, [projects, history, sessionMetadata]);
 
   const renameSessionLocal = (id: string, newName: string) => {
     setHistory(prev => prev.map(h => h.id === id ? { ...h, name: newName } : h));
+  };
+
+  const deleteSessionLocal = (id: string) => {
+    setHistory(prev => prev.filter(h => h.id !== id));
+  };
+
+  const updateSessionMetadataLocal = (projectPath: string, id: string, metadata: SessionMetadata) => {
+    const key = `${projectPath}:${id}`;
+    setSessionMetadata(prev => {
+      const next = { ...prev };
+      const merged = { ...(prev[key] || {}), ...metadata };
+      if (!merged.pinned && !merged.archived && (!merged.tags || merged.tags.length === 0)) {
+        delete next[key];
+      } else {
+        next[key] = merged;
+      }
+      return next;
+    });
+  };
+
+  const clearSessionMetadataLocal = (projectPath: string, id: string) => {
+    const key = `${projectPath}:${id}`;
+    setSessionMetadata(prev => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
   };
 
   return {
@@ -91,6 +129,9 @@ export function useSessions() {
     projects,
     groupedHistory: sortedAndGroupedHistory,
     isDiscovering,
-    renameSessionLocal
+    renameSessionLocal,
+    deleteSessionLocal,
+    updateSessionMetadataLocal,
+    clearSessionMetadataLocal
   };
 }

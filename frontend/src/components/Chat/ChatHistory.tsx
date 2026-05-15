@@ -51,18 +51,38 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Group consecutive messages by role
+  // Group consecutive plain messages by role while preserving structured events.
   const groupedTranscript = useMemo(() => {
-    const groups: { role: string, content: string, timestamp?: string }[] = [];
+    const groups: Array<{
+      role: string;
+      content: string;
+      timestamp?: string;
+      kind?: ChatMessage['kind'];
+      label?: string;
+    }> = [];
+
     transcript.forEach((msg) => {
       const lastGroup = groups[groups.length - 1];
       const msgContent = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-      if (lastGroup && lastGroup.role === msg.role) {
+
+      if (msg.kind && msg.kind !== 'message') {
+        groups.push({
+          role: msg.role,
+          content: msgContent,
+          timestamp: msg.timestamp,
+          kind: msg.kind,
+          label: msg.label,
+        });
+        return;
+      }
+
+      if (lastGroup && lastGroup.role === msg.role && (!lastGroup.kind || lastGroup.kind === 'message')) {
         lastGroup.content += '\n\n' + msgContent;
       } else {
-        groups.push({ role: msg.role, content: msgContent, timestamp: msg.timestamp });
+        groups.push({ role: msg.role, content: msgContent, timestamp: msg.timestamp, kind: 'message' });
       }
     });
+
     return groups;
   }, [transcript]);
 
@@ -104,49 +124,52 @@ export const ChatHistory: React.FC<ChatHistoryProps> = ({
         )}
         
         <div className="chat-flow">
-          {groupedTranscript.map((msg, i) => (
-            <div key={i} className={`chat-bubble ${msg.role}`}>
-              <div className="bubble-avatar">
-                {msg.role === 'user' ? (
-                  <div className="user-avatar-content">U</div>
-                ) : (
-                  <span className="assistant-avatar-icon">✦</span>
-                )}
-              </div>
-              <div className="bubble-content">
-                <div className="markdown-body">
-                  <ReactMarkdown components={{ pre: CodeBlock }}>{msg.content}</ReactMarkdown>
-                </div>
-                
-                <div className="message-actions-wrapper">
-                  <div className="message-actions">
-                    <button className="action-btn-circle copy-btn" title="复制" onClick={() => copyFullMessage(msg.content)}>
-                      <span className="material-symbols-outlined" style={{ fontSize: 18 }}>content_copy</span>
-                    </button>
-                    {msg.role === 'assistant' && (
-                      <>
-                        <button className="action-btn-circle" title="好评">
-                          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>thumb_up</span>
-                        </button>
-                        <button className="action-btn-circle" title="差评">
-                          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>thumb_down</span>
-                        </button>
-                        <button className="action-btn-circle" title="分享">
-                          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>share</span>
-                        </button>
-                      </>
-                    )}
+          {groupedTranscript.map((msg, i) => {
+            if (msg.kind && msg.kind !== 'message') {
+              return (
+                <div key={i} className={`transcript-event ${msg.kind}`}>
+                  <div className="transcript-event-header">
+                    <span className="transcript-event-label">{msg.label || '系统事件'}</span>
+                    {msg.timestamp && <span className="transcript-event-time">{formatTime(msg.timestamp)}</span>}
+                  </div>
+                  <div className="transcript-event-body markdown-body">
+                    <ReactMarkdown components={{ pre: CodeBlock }}>{msg.content}</ReactMarkdown>
                   </div>
                 </div>
+              );
+            }
 
-                {msg.timestamp && (
-                   <div className="bubble-timestamp">
-                      {formatTime(msg.timestamp)}
-                   </div>
-                )}
+            return (
+              <div key={i} className={`chat-bubble ${msg.role}`}>
+                <div className="bubble-avatar">
+                  {msg.role === 'user' ? (
+                    <div className="user-avatar-content">U</div>
+                  ) : (
+                    <span className="assistant-avatar-icon">✦</span>
+                  )}
+                </div>
+                <div className="bubble-content">
+                  <div className="markdown-body">
+                    <ReactMarkdown components={{ pre: CodeBlock }}>{msg.content}</ReactMarkdown>
+                  </div>
+                  
+                  <div className="message-actions-wrapper">
+                    <div className="message-actions">
+                      <button className="action-btn-circle copy-btn" title="复制消息" aria-label="复制消息" onClick={() => copyFullMessage(msg.content)}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 18 }}>content_copy</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {msg.timestamp && (
+                    <div className="bubble-timestamp">
+                        {formatTime(msg.timestamp)}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           
           {transcript.length > 0 && (
             <div className="continue-prompt-container">

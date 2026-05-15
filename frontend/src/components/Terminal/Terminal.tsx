@@ -1,11 +1,8 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Terminal as XTerm } from '@xterm/xterm';
-import { FitAddon } from '@xterm/addon-fit';
-import { WebglAddon } from '@xterm/addon-webgl';
-import { Unicode11Addon } from '@xterm/addon-unicode11';
-import { WebLinksAddon } from '@xterm/addon-web-links';
-import { SearchAddon } from '@xterm/addon-search';
+import type { Terminal as XTerm } from '@xterm/xterm';
+import type { FitAddon } from '@xterm/addon-fit';
+import type { SearchAddon } from '@xterm/addon-search';
 import { ApiService } from '../../services/ApiService';
 import '@xterm/xterm/css/xterm.css';
 import {
@@ -14,6 +11,7 @@ import {
 } from './TerminalIcons';
 import { TerminalStatusBar } from './TerminalStatusBar';
 import { TerminalHeader } from './TerminalHeader';
+import { loadWebglAddon, loadXTermRuntime } from './xtermRuntime';
 
 import type { TerminalProps } from '@web-cli/shared';
 
@@ -189,16 +187,7 @@ const TerminalSession = React.memo(({
     // Only reset error if this is a fresh manual attempt (reconnectAttemptsRef.current === 0)
     if (reconnectAttemptsRef.current === 0) setSystemError(null);
 
-    const host = window.location.hostname || 'localhost';
-    const isDefaultPort =
-      window.location.port === '' ||
-      window.location.port === '80' ||
-      window.location.port === '443';
-    const dimensions = initialCols ? `&cols=${initialCols}&rows=${initialRows}` : '';
-    const wsBase = isDefaultPort
-      ? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${host}/ws`
-      : `ws://${host}:3001`;
-    const wsUrl = `${wsBase}?uuid=${id}&projectPath=${encodeURIComponent(projectPath)}${dimensions}`;
+    const wsUrl = ApiService.getTerminalWsUrl(id, projectPath, initialCols, initialRows);
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
@@ -339,152 +328,173 @@ const TerminalSession = React.memo(({
 
   useEffect(() => {
     if (!terminalRef.current) return;
-    const isDark = theme === 'dark';
-    const term = new XTerm({
-      cursorBlink: true,
-      fontSize: fontSize,
-      fontFamily: '"Google Sans Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace',
-      theme: {
-        background: 'transparent',
-        foreground: isDark ? '#e3e3e3' : '#1f1f1f',
-        cursor: '#4285f4',
-        cursorAccent: isDark ? '#131314' : '#ffffff',
-        selectionBackground: isDark ? 'rgba(138, 180, 248, 0.4)' : 'rgba(66, 133, 244, 0.3)',
-        black: isDark ? '#000000' : '#3c4043',
-        red: '#ea4335',
-        green: '#34a853',
-        yellow: '#fbbc04',
-        blue: '#4285f4',
-        magenta: '#af5fd7',
-        cyan: '#00abc0',
-        white: isDark ? '#e3e3e3' : '#ffffff',
-        brightBlack: isDark ? '#5f6368' : '#70757a',
-        brightRed: '#f28b82',
-        brightGreen: '#81c995',
-        brightYellow: '#fdd663',
-        brightBlue: '#8ab4f8',
-        brightMagenta: '#c58af9',
-        brightCyan: '#82d1f1',
-        brightWhite: isDark ? '#ffffff' : '#202124',
-      },
-      allowProposedApi: true,
-      scrollback: 20000,
-      cursorStyle: 'block',
-      convertEol: true,
-      minimumContrastRatio: 4.5,
-      screenReaderMode: true,
-    });
-    
-    const fitAddon = new FitAddon();
-    term.loadAddon(fitAddon);
-    const unicode11Addon = new Unicode11Addon();
-    term.loadAddon(unicode11Addon);
-    term.unicode.activeVersion = '11';
-    term.loadAddon(new WebLinksAddon());
-    const searchAddon = new SearchAddon();
-    term.loadAddon(searchAddon);
-    searchAddonRef.current = searchAddon;
+    let disposed = false;
+    let termNode: HTMLDivElement | null = null;
+    let resizeObserver: ResizeObserver | null = null;
+    let term: XTerm | null = null;
 
-    term.open(terminalRef.current);
-    try { term.loadAddon(new WebglAddon()); } catch { /* fallback */ }
+    const setupTerminal = async () => {
+      const runtime = await loadXTermRuntime();
+      if (disposed || !terminalRef.current) return;
 
-    xtermRef.current = term;
-    fitAddonRef.current = fitAddon;
-    
-    const resizeObserver = new ResizeObserver(() => {
-       if (terminalRef.current?.offsetParent && fitAddonRef.current) {
+      const isDark = theme === 'dark';
+      term = new runtime.Terminal({
+        cursorBlink: true,
+        fontSize: fontSize,
+        fontFamily: '"Google Sans Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace',
+        theme: {
+          background: 'transparent',
+          foreground: isDark ? '#e3e3e3' : '#1f1f1f',
+          cursor: '#4285f4',
+          cursorAccent: isDark ? '#131314' : '#ffffff',
+          selectionBackground: isDark ? 'rgba(138, 180, 248, 0.4)' : 'rgba(66, 133, 244, 0.3)',
+          black: isDark ? '#000000' : '#3c4043',
+          red: '#ea4335',
+          green: '#34a853',
+          yellow: '#fbbc04',
+          blue: '#4285f4',
+          magenta: '#af5fd7',
+          cyan: '#00abc0',
+          white: isDark ? '#e3e3e3' : '#ffffff',
+          brightBlack: isDark ? '#5f6368' : '#70757a',
+          brightRed: '#f28b82',
+          brightGreen: '#81c995',
+          brightYellow: '#fdd663',
+          brightBlue: '#8ab4f8',
+          brightMagenta: '#c58af9',
+          brightCyan: '#82d1f1',
+          brightWhite: isDark ? '#ffffff' : '#202124',
+        },
+        allowProposedApi: true,
+        scrollback: 20000,
+        cursorStyle: 'block',
+        convertEol: true,
+        minimumContrastRatio: 4.5,
+        screenReaderMode: true,
+      });
+
+      const fitAddon = new runtime.FitAddon();
+      term.loadAddon(fitAddon);
+      const unicode11Addon = new runtime.Unicode11Addon();
+      term.loadAddon(unicode11Addon);
+      term.unicode.activeVersion = '11';
+      term.loadAddon(new runtime.WebLinksAddon());
+      const searchAddon = new runtime.SearchAddon();
+      term.loadAddon(searchAddon);
+      searchAddonRef.current = searchAddon;
+
+      term.open(terminalRef.current);
+      xtermRef.current = term;
+      fitAddonRef.current = fitAddon;
+
+      const WebglAddon = await loadWebglAddon();
+      if (!disposed && WebglAddon) {
+        try { term.loadAddon(new WebglAddon()); } catch { /* fallback */ }
+      }
+
+      resizeObserver = new ResizeObserver(() => {
+        if (terminalRef.current?.offsetParent && fitAddonRef.current) {
           fitAddonRef.current.fit();
           if (wsRef.current?.readyState === WebSocket.OPEN && xtermRef.current) {
-             wsRef.current.send(JSON.stringify({ type: 'resize', cols: xtermRef.current.cols, rows: xtermRef.current.rows }));
+            wsRef.current.send(JSON.stringify({ type: 'resize', cols: xtermRef.current.cols, rows: xtermRef.current.rows }));
           }
-       }
-    });
-    resizeObserver.observe(terminalRef.current);
+        }
+      });
+      resizeObserver.observe(terminalRef.current);
 
-    setTimeout(() => {
-      if (fitAddonRef.current && xtermRef.current) {
-        fitAddonRef.current.fit();
-        connect(xtermRef.current.cols, xtermRef.current.rows);
-      }
-    }, 300);
+      setTimeout(() => {
+        if (disposed) return;
+        if (fitAddonRef.current && xtermRef.current) {
+          fitAddonRef.current.fit();
+          connect(xtermRef.current.cols, xtermRef.current.rows);
+        }
+      }, 300);
 
-    term.onData(data => {
-      if (data.startsWith('\x1b[?')) return;
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'input', data }));
-      }
-    });
+      term.onData(data => {
+        if (data.startsWith('\x1b[?')) return;
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: 'input', data }));
+        }
+      });
 
-    term.onBell(() => {
-      setVisualBell(true);
-      setTimeout(() => setVisualBell(false), 200);
-    });
+      term.onBell(() => {
+        setVisualBell(true);
+        setTimeout(() => setVisualBell(false), 200);
+      });
 
-    term.onScroll(() => {
-      // Use a larger buffer (5 lines) and requestAnimationFrame for stability
-      const buffer = 5;
-      const isBottom = term.buffer.active.viewportY >= term.buffer.active.baseY - buffer;
-      setHasNewContent(!isBottom);
-    });
+      term.onScroll(() => {
+        const buffer = 5;
+        const isBottom = term!.buffer.active.viewportY >= term!.buffer.active.baseY - buffer;
+        setHasNewContent(!isBottom);
+      });
 
-    term.onSelectionChange(() => handleSelectionChange());
+      term.onSelectionChange(() => handleSelectionChange());
 
-    // Auto-copy on select
-    const handleMouseUpInner = () => {
-      if (term.hasSelection()) {
-        handleCopy(true);
-      }
-    };
+      const handleMouseUpInner = () => {
+        if (term?.hasSelection()) {
+          handleCopy(true);
+        }
+      };
 
-    const handleMouseDownInner = (e: MouseEvent) => {
-      if (e.button === 1) { // Middle click
+      const handleMouseDownInner = (e: MouseEvent) => {
+        if (e.button === 1) {
+          e.preventDefault();
+          handlePaste(true);
+        }
+      };
+
+      const handleContextMenuInner = (e: MouseEvent) => {
         e.preventDefault();
-        handlePaste(true);
-      }
+        handlersRef.current.setContextMenu({ x: e.clientX, y: e.clientY });
+      };
+
+      termNode = terminalRef.current;
+      termNode.addEventListener('mouseup', handleMouseUpInner);
+      termNode.addEventListener('mousedown', handleMouseDownInner);
+      termNode.addEventListener('contextmenu', handleContextMenuInner);
+
+      term.attachCustomKeyEventHandler((e) => {
+        if (e.type === 'keydown') {
+          const isCopy = (e.ctrlKey || e.metaKey) && e.key === 'c';
+          const isPaste = (e.ctrlKey || e.metaKey) && e.key === 'v';
+
+          if (isCopy && term?.hasSelection()) {
+            handleCopy();
+            return false;
+          }
+
+          if (isPaste) {
+            return true;
+          }
+        }
+        return true;
+      });
+
+      return () => {
+        termNode?.removeEventListener('mouseup', handleMouseUpInner);
+        termNode?.removeEventListener('mousedown', handleMouseDownInner);
+        termNode?.removeEventListener('contextmenu', handleContextMenuInner);
+      };
     };
 
-    const handleContextMenuInner = (e: MouseEvent) => {
-      e.preventDefault();
-      handlersRef.current.setContextMenu({ x: e.clientX, y: e.clientY });
-    };
-
-    const termNode = terminalRef.current;
-    termNode.addEventListener('mouseup', handleMouseUpInner);
-    termNode.addEventListener('mousedown', handleMouseDownInner);
-    termNode.addEventListener('contextmenu', handleContextMenuInner);
-
-    // Keyboard shortcuts - prioritized native behavior for paste
-    term.attachCustomKeyEventHandler((e) => {
-      if (e.type === 'keydown') {
-        const isCopy = (e.ctrlKey || e.metaKey) && e.key === 'c';
-        const isPaste = (e.ctrlKey || e.metaKey) && e.key === 'v';
-
-        if (isCopy && term.hasSelection()) {
-          // Native behavior for copy usually works well if selection is captured.
-          // Force update system clipboard if needed.
-          handleCopy(); 
-          return false;
-        }
-
-        if (isPaste) {
-          // DO NOT prevent default. Let browser's native paste handler in terminal's hidden textarea work.
-          // This ensures the MOST RECENT system clipboard content is pasted.
-          return true;
-        }
-      }
-      return true;
+    let cleanupHandlers: (() => void) | undefined;
+    setupTerminal().then((cleanup) => {
+      cleanupHandlers = cleanup;
+    }).catch((error) => {
+      console.error('Failed to initialize terminal runtime', error);
+      setSystemError('终端运行时加载失败，请刷新后重试。');
+      setStatus('disconnected');
     });
 
     return () => {
-      resizeObserver.disconnect();
-      termNode.removeEventListener('mouseup', handleMouseUpInner);
-      termNode.removeEventListener('mousedown', handleMouseDownInner);
-      termNode.removeEventListener('contextmenu', handleContextMenuInner);
+      disposed = true;
+      cleanupHandlers?.();
+      resizeObserver?.disconnect();
       if (wsRef.current) {
         wsRef.current.onclose = null;
         wsRef.current.close();
       }
-      term.dispose();
+      term?.dispose();
     };
   }, [id, projectPath, theme, fontSize, connect, handleCopy, handlePaste, handleSelectionChange]);
 
@@ -602,13 +612,21 @@ const TerminalSession = React.memo(({
   );
 });
 
-const Terminal: React.FC<TerminalProps> = React.memo(({ uuid, projectPath, initialPrompt, theme, onSendToChat }) => {
+const Terminal: React.FC<TerminalProps> = React.memo(({
+  uuid,
+  projectPath,
+  initialPrompt,
+  theme,
+  terminalFontSize,
+  mobileHelperDefaultVisible,
+  onSendToChat
+}) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [isSearchVisible, setIsSearchVisible] = useState(false);
-  const [fontSize] = useState(14);
+  const fontSize = terminalFontSize ?? 14;
   const [searchQuery, setSearchQuery] = useState('');
   const [searchMatches, setSearchMatches] = useState({ current: 0, total: 0 });
   const [isCopied, setIsCopied] = useState(false);
@@ -618,7 +636,13 @@ const Terminal: React.FC<TerminalProps> = React.memo(({ uuid, projectPath, initi
   
   const [ctrlLatched, setCtrlLatched] = useState(false);
   const [altLatched, setAltLatched] = useState(false);
-  const [isHelperVisible, setIsHelperVisible] = useState(true);
+  const [isHelperVisible, setIsHelperVisible] = useState(() => {
+    if (typeof mobileHelperDefaultVisible === 'boolean') {
+      return mobileHelperDefaultVisible;
+    }
+    const saved = localStorage.getItem('terminal_mobile_helper_visible');
+    return saved === null ? true : saved === 'true';
+  });
 
   const [tabs, setTabs] = useState<{id: string, label: string, color?: string}[]>(() => {
     const saved = localStorage.getItem('terminal_tabs_v4');
@@ -652,6 +676,16 @@ const Terminal: React.FC<TerminalProps> = React.memo(({ uuid, projectPath, initi
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  useEffect(() => {
+    if (typeof mobileHelperDefaultVisible === 'boolean') {
+      setIsHelperVisible(mobileHelperDefaultVisible);
+    }
+  }, [mobileHelperDefaultVisible]);
+
+  useEffect(() => {
+    localStorage.setItem('terminal_mobile_helper_visible', String(isHelperVisible));
+  }, [isHelperVisible]);
 
   const activeSession = useMemo(() => sessionData[activeTabId] || { status: 'disconnected', ws: null, xterm: null, searchAddon: null, fitAddon: null }, [sessionData, activeTabId]);
 

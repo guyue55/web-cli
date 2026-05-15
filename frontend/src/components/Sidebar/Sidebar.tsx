@@ -1,6 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import type { HistoryItem, ProjectEntry } from '../../hooks/useSessions';
 import { ApiService } from '../../services/ApiService';
+import type { WorkspacePanelMode } from '../Layout/WorkspacePanel';
+import type { SessionMetadata } from '@web-cli/shared';
+import {
+  getSessionDisplayName,
+  getSessionSecondaryLabel,
+  isUntitledSessionName,
+} from '../../utils/sessionPresentation';
 
 interface SidebarProps {
   groupedHistory: { name: string, items: HistoryItem[] }[];
@@ -15,6 +23,10 @@ interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
   renameSessionLocal: (id: string, name: string) => void;
+  deleteSessionLocal: (id: string) => void;
+  updateSessionMetadataLocal: (projectPath: string, id: string, metadata: SessionMetadata) => void;
+  clearSessionMetadataLocal: (projectPath: string, id: string) => void;
+  onOpenPanel: (mode: Exclude<WorkspacePanelMode, null>) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -29,17 +41,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isLoading,
   collapsed,
   onToggle,
-  renameSessionLocal
+  renameSessionLocal,
+  deleteSessionLocal,
+  updateSessionMetadataLocal,
+  clearSessionMetadataLocal,
+  onOpenPanel
 }) => {
-  const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>(() => {
+  const [sessionFilter, setSessionFilter] = useState<'all' | 'active' | 'archived'>('all');
+  const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean | undefined>>(() => {
     const saved = localStorage.getItem('gemini-collapsed-projects');
-    return saved ? JSON.parse(saved) : {};
+    try {
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      localStorage.removeItem('gemini-collapsed-projects');
+      return {};
+    }
   });
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
+  const sidebarRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const settingsButtonRef = useRef<HTMLDivElement>(null);
+  const [menuPosition, setMenuPosition] = useState<{ left: number; bottom: number; width: number } | null>(null);
 
   useEffect(() => {
     localStorage.setItem('gemini-collapsed-projects', JSON.stringify(collapsedProjects));
@@ -47,13 +72,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const clickedInsideMenu = menuRef.current?.contains(target);
+      const clickedSettingsButton = settingsButtonRef.current?.contains(target);
+      if (!clickedInsideMenu && !clickedSettingsButton) {
         setIsMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (!isMenuOpen) return;
+
+    const updateMenuPosition = () => {
+      const sidebarRect = sidebarRef.current?.getBoundingClientRect();
+      const buttonRect = settingsButtonRef.current?.getBoundingClientRect();
+      if (!sidebarRect || !buttonRect) return;
+
+      setMenuPosition({
+        left: sidebarRect.left + 12,
+        bottom: window.innerHeight - buttonRect.top + 8,
+        width: Math.max(sidebarRect.width - 24, 180),
+      });
+    };
+
+    updateMenuPosition();
+    window.addEventListener('resize', updateMenuPosition);
+    window.addEventListener('scroll', updateMenuPosition, true);
+
+    return () => {
+      window.removeEventListener('resize', updateMenuPosition);
+      window.removeEventListener('scroll', updateMenuPosition, true);
+    };
+  }, [collapsed, isMenuOpen]);
 
   const toggleProject = (projectName: string) => {
     setCollapsedProjects(prev => ({
@@ -65,7 +118,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const handleStartRename = (e: React.MouseEvent, item: HistoryItem) => {
     e.stopPropagation();
     setEditingId(item.id);
-    setEditName(item.name);
+    setEditName(isUntitledSessionName(item.name) ? '' : item.name);
   };
 
   const handleConfirmRename = async (item: HistoryItem) => {
@@ -82,15 +135,89 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
+  const handleDeleteSession = async (e: React.MouseEvent, item: HistoryItem) => {
+    e.stopPropagation();
+    const confirmed = window.confirm(`删除会话「${getSessionDisplayName(item)}」？此操作会移除 Gemini 历史记录。`);
+    if (!confirmed) return;
+    try {
+      await ApiService.deleteSession(item.id, item.projectPath);
+      deleteSessionLocal(item.id);
+      clearSessionMetadataLocal(item.projectPath, item.id);
+    } catch {
+      alert('删除失败');
+    }
+  };
+
+  const togglePinnedSession = async (e: React.MouseEvent, item: HistoryItem) => {
+    e.stopPropagation();
+    const nextPinned = !item.pinned;
+    try {
+      const metadata = await ApiService.updateSessionMetadata(item.id, item.projectPath, { pinned: nextPinned });
+      updateSessionMetadataLocal(item.projectPath, item.id, metadata);
+    } catch {
+      alert('固定状态更新失败');
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent, item: HistoryItem) => {
     if (e.key === 'Enter') handleConfirmRename(item);
     if (e.key === 'Escape') setEditingId(null);
   };
 
+  const toggleArchivedSession = async (e: React.MouseEvent, item: HistoryItem) => {
+    e.stopPropagation();
+    const nextArchived = !item.archived;
+    try {
+      const metadata = await ApiService.updateSessionMetadata(item.id, item.projectPath, { archived: nextArchived });
+      updateSessionMetadataLocal(item.projectPath, item.id, metadata);
+    } catch {
+      alert('归档状态更新失败');
+    }
+  };
+
+  const editSessionTags = async (e: React.MouseEvent, item: HistoryItem) => {
+    e.stopPropagation();
+    const currentTags = item.tags || [];
+    const nextValue = window.prompt('编辑标签，使用英文逗号分隔', currentTags.join(', '));
+    if (nextValue === null) return;
+
+    const normalizedTags = nextValue
+      .split(',')
+      .map(tag => tag.trim())
+      .filter(Boolean)
+      .slice(0, 6);
+
+    try {
+      const metadata = await ApiService.updateSessionMetadata(item.id, item.projectPath, { tags: normalizedTags });
+      updateSessionMetadataLocal(item.projectPath, item.id, metadata);
+    } catch {
+      alert('标签更新失败');
+    }
+  };
+
+  const matchesSessionFilter = (item: HistoryItem) => {
+    const isArchived = Boolean(item.archived);
+    const isActive = activeSessions.includes(`${item.projectPath}:${item.id}`);
+
+    if (sessionFilter === 'archived') return isArchived;
+    if (sessionFilter === 'active') return isActive && !isArchived;
+    return !isArchived;
+  };
+
+  const pinnedItems = groupedHistory
+    .flatMap(group => group.items)
+    .filter(item => item.pinned && matchesSessionFilter(item))
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+
   return (
-    <div className={`sidebar-wrapper ${collapsed ? 'collapsed' : ''}`}>
+    <div ref={sidebarRef} className={`sidebar-wrapper ${collapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-top">
-        <button className="sidebar-toggle-btn" onClick={onToggle} title="Toggle Sidebar">
+        <button
+          className="sidebar-toggle-btn"
+          onClick={onToggle}
+          title={collapsed ? '展开侧边栏' : '收起侧边栏'}
+          aria-label={collapsed ? '展开侧边栏' : '收起侧边栏'}
+        >
           <span className="material-symbols-outlined">menu</span>
         </button>
 
@@ -98,6 +225,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           className={`new-chat-btn-official ${collapsed ? 'is-mini' : ''}`} 
           onClick={onNewChat}
           title={collapsed ? "发起新对话" : undefined}
+          aria-label="发起新对话"
         >
           <span className="material-symbols-outlined plus-icon">add</span>
           {!collapsed && <span>发起新对话</span>}
@@ -127,25 +255,109 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       <div className="sidebar-mid session-list-container">
+        {!collapsed && (
+          <div className="session-filter-row" role="tablist" aria-label="会话筛选">
+            {[
+              { key: 'all', label: '全部' },
+              { key: 'active', label: '活动' },
+              { key: 'archived', label: '归档' },
+            ].map(filter => (
+              <button
+                key={filter.key}
+                className={`session-filter-chip ${sessionFilter === filter.key ? 'active' : ''}`}
+                onClick={() => setSessionFilter(filter.key as 'all' | 'active' | 'archived')}
+                aria-pressed={sessionFilter === filter.key}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {!collapsed && pinnedItems.length > 0 && (
+          <>
+            <div className="sidebar-section-label">已固定</div>
+            <ul className="session-list pinned-session-list">
+              {pinnedItems.map((item) => {
+                const displayName = getSessionDisplayName(item);
+                const secondaryLabel = getSessionSecondaryLabel(item);
+                const isActive = activeSessions.includes(`${item.projectPath}:${item.id}`);
+                const tags = item.tags || [];
+
+                return (
+                  <li
+                    key={`pinned-${item.projectPath}-${item.id}`}
+                    className={`session-card pinned ${item.id === selectedSession?.id ? 'active' : ''}`}
+                    onClick={() => onSelectSession(item)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onSelectSession(item);
+                      }
+                    }}
+                  >
+                    <div className="session-copy">
+                      <span className="history-name">{displayName}</span>
+                      <span className="history-meta">{secondaryLabel}</span>
+                      {tags.length > 0 && (
+                        <div className="session-tag-row">
+                          {tags.map(tag => <span key={tag} className="session-tag">{tag}</span>)}
+                        </div>
+                      )}
+                    </div>
+                    <div className="session-actions">
+                      <button className="rename-btn pin-btn active" aria-label={`取消固定 ${displayName}`} onClick={(e) => togglePinnedSession(e, item)}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>keep</span>
+                      </button>
+                      <button className="rename-btn archive-btn" aria-label={`归档 ${displayName}`} onClick={(e) => toggleArchivedSession(e, item)}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>archive</span>
+                      </button>
+                      {isActive && (
+                        <div className="active-dot" style={{ flexShrink: 0, width: 6, height: 6, backgroundColor: '#10b981', borderRadius: '50%', boxShadow: '0 0 4px #10b981' }} />
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
+
         {!collapsed && <div className="sidebar-section-label">最近</div>}
         
         {groupedHistory.length === 0 && isLoading ? (
           <div className="skeleton-list">
              {[1,2,3].map(i => <div key={i} className="skeleton-item" style={{ height: 32, margin: '4px 10px', borderRadius: 16, backgroundColor: 'var(--bg-hover)' }} />)}
           </div>
-        ) : groupedHistory.map(({ name: projectName, items }) => {
+        ) : groupedHistory.map(({ name: projectName, items }, projectIndex) => {
           const project = projects.find(p => p.name === projectName);
-          const filteredItems = items.filter(item => 
-            item.name.toLowerCase().includes(searchQuery.toLowerCase())
+          const normalizedQuery = searchQuery.trim().toLowerCase();
+          const projectMatches = normalizedQuery.length > 0 && (
+            projectName.toLowerCase().includes(normalizedQuery) ||
+            (project?.path || '').toLowerCase().includes(normalizedQuery)
           );
+          const filteredItems = normalizedQuery.length === 0 || projectMatches
+            ? items
+            : items.filter(item => 
+                getSessionDisplayName(item).toLowerCase().includes(normalizedQuery) ||
+                item.projectName.toLowerCase().includes(normalizedQuery) ||
+                item.projectPath.toLowerCase().includes(normalizedQuery) ||
+                item.time.toLowerCase().includes(normalizedQuery) ||
+                (item.tags || []).some(tag => tag.toLowerCase().includes(normalizedQuery))
+              );
+          const visibleItems = filteredItems.filter(matchesSessionFilter);
 
-          if (searchQuery && filteredItems.length === 0) return null;
+          if (searchQuery && visibleItems.length === 0) return null;
+          if (!searchQuery && visibleItems.length === 0 && sessionFilter !== 'all') return null;
 
-          const anyActive = filteredItems.some(item => 
+          const anyActive = visibleItems.some(item => 
             activeSessions.includes(`${item.projectPath}:${item.id}`)
           );
 
-          const isProjectCollapsed = searchQuery ? false : (collapsedProjects[projectName] !== false);
+          const defaultCollapsed = !anyActive && projectIndex > 0;
+          const isProjectCollapsed = normalizedQuery ? false : (collapsedProjects[projectName] ?? defaultCollapsed);
 
           return (
             <div key={projectName} className="project-group">
@@ -154,6 +366,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   className={`project-label collapsible ${isProjectCollapsed ? 'is-collapsed' : ''}`} 
                   onClick={() => toggleProject(projectName)}
                   title={`路径: ${project?.path || 'N/A'}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={!isProjectCollapsed}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      toggleProject(projectName);
+                    }
+                  }}
                 >
                   <span className="material-symbols-outlined project-icon" style={{ fontSize: 18 }}>folder</span>
                   <span className="project-name-text">{projectName}</span>
@@ -163,6 +384,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       <span className="active-status-dot-mini" />
                     )}
                     <span className="session-count-badge">{filteredItems.length}</span>
+                    {sessionFilter !== 'all' && <span className="session-count-badge subtle">{visibleItems.length}</span>}
                     <span className="material-symbols-outlined chevron-icon" style={{ fontSize: 16 }}>expand_more</span>
                   </div>
                 </div>
@@ -172,15 +394,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <div className={`project-session-container ${isProjectCollapsed ? 'is-collapsed' : ''}`}>
                   <div className="project-session-inner">
                     <ul className="session-list">
-                      {filteredItems.map((item) => {
+                      {visibleItems.map((item) => {
                         const isActive = activeSessions.includes(`${item.projectPath}:${item.id}`);
-                        const hoverInfo = `标题: ${item.name}\n时间: ${item.time}\n项目: ${item.projectName}\n路径: ${item.projectPath}`;
+                        const displayName = getSessionDisplayName(item);
+                        const secondaryLabel = getSessionSecondaryLabel(item);
+                        const tags = item.tags || [];
+                        const isArchived = Boolean(item.archived);
+                        const hoverInfo = `标题: ${displayName}\n时间: ${item.time}\n项目: ${item.projectName}\n路径: ${item.projectPath}`;
                         
                         return (
                           <li 
                             key={item.id} 
                             className={`session-card ${item.id === selectedSession?.id ? 'active' : ''} ${editingId === item.id ? 'editing' : ''}`}
                             onClick={() => editingId !== item.id && onSelectSession(item)}
+                            onKeyDown={(e) => {
+                              if (editingId === item.id) return;
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                onSelectSession(item);
+                              }
+                            }}
+                            role="button"
+                            tabIndex={0}
+                            aria-current={item.id === selectedSession?.id ? 'page' : undefined}
                             title={hoverInfo}
                           >
                             {editingId === item.id ? (
@@ -195,10 +431,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
                               />
                             ) : (
                               <>
-                                <span className="history-name">{item.name}</span>
+                                <div className="session-copy">
+                                  <span className="history-name">{displayName}</span>
+                                  <span className="history-meta">{secondaryLabel}</span>
+                                  {tags.length > 0 && (
+                                    <div className="session-tag-row">
+                                      {tags.map(tag => <span key={tag} className="session-tag">{tag}</span>)}
+                                    </div>
+                                  )}
+                                </div>
                                 <div className="session-actions">
-                                   <button className="rename-btn" onClick={(e) => handleStartRename(e, item)}>
+                                   <button className="rename-btn" aria-label={`重命名 ${displayName}`} onClick={(e) => handleStartRename(e, item)}>
                                       <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit</span>
+                                   </button>
+                                   <button className="rename-btn" aria-label={`编辑 ${displayName} 的标签`} onClick={(e) => editSessionTags(e, item)}>
+                                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>sell</span>
+                                   </button>
+                                   <button className="rename-btn danger" aria-label={`删除 ${displayName}`} onClick={(e) => handleDeleteSession(e, item)}>
+                                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>delete</span>
+                                   </button>
+                                   <button className={`rename-btn pin-btn ${item.pinned ? 'active' : ''}`} aria-label={`${item.pinned ? '取消固定' : '固定'} ${displayName}`} onClick={(e) => togglePinnedSession(e, item)}>
+                                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>keep</span>
+                                   </button>
+                                   <button className={`rename-btn archive-btn ${isArchived ? 'active' : ''}`} aria-label={`${isArchived ? '取消归档' : '归档'} ${displayName}`} onClick={(e) => toggleArchivedSession(e, item)}>
+                                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>archive</span>
                                    </button>
                                    {isActive && (
                                      <div className="active-dot" style={{ flexShrink: 0, width: 6, height: 6, backgroundColor: '#10b981', borderRadius: '50%', boxShadow: '0 0 4px #10b981' }} />
@@ -228,28 +484,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       <div className="sidebar-bottom">
-          <div className="sidebar-bottom-container" ref={menuRef}>
-            {isMenuOpen && (
-              <div className="sidebar-floating-menu glass-effect">
-                <div className="menu-item" onClick={() => { setIsMenuOpen(false); }}>
-                  <span className="material-symbols-outlined">help</span>
-                  <span>帮助 (Help)</span>
-                </div>
-                <div className="menu-item" onClick={() => { setIsMenuOpen(false); }}>
-                  <span className="material-symbols-outlined">history</span>
-                  <span>活动 (Activity)</span>
-                </div>
-                <div className="menu-divider" />
-                <div className="menu-item" onClick={() => { setIsMenuOpen(false); }}>
-                  <span className="material-symbols-outlined">settings</span>
-                  <span>设置 (Settings)</span>
-                </div>
-              </div>
-            )}
+          <div className="sidebar-bottom-container">
             <div 
+              ref={settingsButtonRef}
               className={`sidebar-item-static settings-btn ${isMenuOpen ? 'active' : ''}`} 
               onClick={() => setIsMenuOpen(!isMenuOpen)}
               title="设置"
+              role="button"
+              tabIndex={0}
+              aria-expanded={isMenuOpen}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  setIsMenuOpen(!isMenuOpen);
+                }
+              }}
             >
                <span className="icon-span">
                  <span className="material-symbols-outlined">settings</span>
@@ -258,6 +507,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
       </div>
+
+      {isMenuOpen && menuPosition && createPortal(
+        <div
+          ref={menuRef}
+          className="sidebar-floating-menu glass-effect"
+          style={{
+            position: 'fixed',
+            left: menuPosition.left,
+            bottom: menuPosition.bottom,
+            width: menuPosition.width,
+          }}
+        >
+          <div className="menu-item" onClick={() => { onOpenPanel('help'); setIsMenuOpen(false); }}>
+            <span className="material-symbols-outlined">help</span>
+            <span>帮助</span>
+          </div>
+          <div className="menu-item" onClick={() => { onOpenPanel('activity'); setIsMenuOpen(false); }}>
+            <span className="material-symbols-outlined">history</span>
+            <span>活动</span>
+          </div>
+          <div className="menu-divider" />
+          <div className="menu-item" onClick={() => { onOpenPanel('settings'); setIsMenuOpen(false); }}>
+            <span className="material-symbols-outlined">settings</span>
+            <span>设置</span>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

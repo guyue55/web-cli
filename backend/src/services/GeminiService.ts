@@ -5,6 +5,7 @@ import fs from 'fs';
 import os from 'os';
 import { WebSocket } from 'ws';
 import type { HistoryItem, ChatMessage } from '@web-cli/shared';
+import { parseTranscriptContent } from './transcriptParser.js';
 
 const execAsync = promisify(exec);
 const GEMINI_BASE_DIR = path.join(os.homedir(), '.gemini');
@@ -12,6 +13,11 @@ const GEMINI_BASE_DIR = path.join(os.homedir(), '.gemini');
 export class GeminiService {
   private static sessionCache: HistoryItem[] = [];
   private static isScanning = false;
+  private static transcriptCache = new Map<string, {
+    size: number;
+    mtimeMs: number;
+    messages: ChatMessage[];
+  }>();
 
   static getCachedSessions(): HistoryItem[] {
     return this.sessionCache;
@@ -85,14 +91,33 @@ export class GeminiService {
                 }
 
                 if (sessionName === 'Untitled Session') {
-                  const firstMsgLine = lines.find(l => l && l.trim() && l.includes('"type":"user"'));
-                  if (firstMsgLine) {
+                  let firstGemini = '';
+                  for (let i = 1; i < lines.length; i++) {
+                    const line = lines[i];
+                    if (!line || !line.trim()) continue;
                     try {
-                      const entry = JSON.parse(firstMsgLine);
-                      sessionName = typeof entry.content === 'string' ? entry.content : 
-                                    (Array.isArray(entry.content) ? entry.content.map((p: any) => p.text || '').join('') : 'Complex Session');
-                      if (sessionName.length > 50) sessionName = sessionName.substring(0, 47) + '...';
+                      const entry = JSON.parse(line);
+                      let text = '';
+                      if (typeof entry.content === 'string') {
+                        text = entry.content;
+                      } else if (Array.isArray(entry.content)) {
+                        text = entry.content.map((p: any) => p.text || '').join('');
+                      }
+
+                      if (entry.type === 'user' && text.trim()) {
+                        sessionName = text.trim();
+                        break;
+                      }
+                      if (entry.type === 'gemini' && text.trim() && !firstGemini) {
+                        firstGemini = text.trim();
+                      }
                     } catch (e) {}
+                  }
+                  if (sessionName === 'Untitled Session' && firstGemini) {
+                    sessionName = firstGemini;
+                  }
+                  if (sessionName !== 'Untitled Session' && sessionName.length > 50) {
+                    sessionName = sessionName.substring(0, 47) + '...';
                   }
                 }
 
@@ -137,61 +162,55 @@ export class GeminiService {
     if (uuid.startsWith('new-')) return [];
     
     try {
-      const chatDir = path.join(GEMINI_BASE_DIR, 'tmp', projectName, 'chats');
-      if (!fs.existsSync(chatDir)) return [];
+      const filePath = this.resolveSessionFilePath(uuid, projectName);
+      if (!filePath) return [];
 
-      const files = fs.readdirSync(chatDir);
-      // Use exact match or contains with UUID to avoid shortId collision
-      const sessionFile = files.find(f => f.includes(uuid) && f.endsWith('.jsonl'));
+      const messages = this.getOrParseTranscript(filePath);
+      if (offset >= messages.length) return [];
 
-      if (!sessionFile) {
-        // Fallback to shortId search if full UUID file not found (legacy support)
-        const shortId = uuid.substring(0, 8);
-        const legacyFile = files.find(f => f.includes(shortId) && f.endsWith('.jsonl'));
-        if (!legacyFile) return [];
-        return this.parseTranscriptFile(path.join(chatDir, legacyFile), limit, offset);
-      }
-
-      return this.parseTranscriptFile(path.join(chatDir, sessionFile), limit, offset);
+      const reversed = [...messages].reverse();
+      const paginated = reversed.slice(offset, offset + limit);
+      return paginated.reverse();
     } catch (error) {
       console.error(`GeminiService.getTranscript failed:`, error);
       return [];
     }
   }
 
-  private static parseTranscriptFile(filePath: string, limit: number, offset: number): ChatMessage[] {
-    const content = fs.readFileSync(filePath, 'utf-8');
-    const lines = content.split('\n').filter(l => l.trim());
-    
-    const allMessages: ChatMessage[] = [];
-    for (const line of lines) {
-      try {
-        const entry = JSON.parse(line);
-        // Include more types to avoid "missing message" feel
-        // mapping 'gemini', 'thought', 'call' all to assistant for UI simplicity, 
-        // or keep original for specialized styling.
-        if (entry.content) {
-          let messageContent = '';
-          if (typeof entry.content === 'string') {
-            messageContent = entry.content;
-          } else if (Array.isArray(entry.content)) {
-            messageContent = entry.content.map((part: any) => part.text || '').join('');
-          }
+  private static resolveSessionFilePath(uuid: string, projectName: string): string | null {
+    const chatDir = path.join(GEMINI_BASE_DIR, 'tmp', projectName, 'chats');
+    if (!fs.existsSync(chatDir)) return null;
 
-          if (messageContent.trim() || entry.type === 'thought' || entry.type === 'call') {
-            allMessages.push({ 
-              role: entry.type === 'user' ? 'user' : 'assistant', 
-              content: messageContent.trim() || `[${entry.type}]`, 
-              timestamp: entry.timestamp 
-            });
-          }
-        }
-      } catch (e) {}
+    const files = fs.readdirSync(chatDir);
+    const exactMatch = files.find(f => f.includes(uuid) && f.endsWith('.jsonl'));
+    if (exactMatch) return path.join(chatDir, exactMatch);
+
+    const shortId = uuid.substring(0, 8);
+    const legacyFile = files.find(f => f.includes(shortId) && f.endsWith('.jsonl'));
+    return legacyFile ? path.join(chatDir, legacyFile) : null;
+  }
+
+  private static getOrParseTranscript(filePath: string): ChatMessage[] {
+    const stats = fs.statSync(filePath);
+    const cached = this.transcriptCache.get(filePath);
+
+    if (cached && cached.size === stats.size && cached.mtimeMs === stats.mtimeMs) {
+      return cached.messages;
     }
 
-    const reversed = [...allMessages].reverse();
-    const paginated = reversed.slice(offset, offset + limit);
-    return paginated.reverse();
+    const messages = this.parseTranscriptFile(filePath);
+    this.transcriptCache.set(filePath, {
+      size: stats.size,
+      mtimeMs: stats.mtimeMs,
+      messages,
+    });
+
+    return messages;
+  }
+
+  private static parseTranscriptFile(filePath: string): ChatMessage[] {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    return parseTranscriptContent(content);
   }
 
   static async deleteSession(uuid: string, projectPath: string): Promise<void> {
