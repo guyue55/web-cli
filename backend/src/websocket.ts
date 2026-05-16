@@ -42,7 +42,7 @@ export function setupWebSocket(wss: WebSocketServer) {
       projectPath = assertAllowedPath(projectPathParam, 'projectPath');
     } catch (err) {
       ws.send(JSON.stringify({ type: 'output', data: `\r\n\x1b[31m[Error] ${(err as Error).message}\x1b[0m\r\n` }));
-      ws.close(1008, 'Workspace path not allowed');
+      ws.close(1008, 'Project path not accessible');
       return;
     }
 

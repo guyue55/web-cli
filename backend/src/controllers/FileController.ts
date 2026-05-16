@@ -4,6 +4,10 @@ import path from 'path';
 import { SecurityConfig } from '../config/SecurityConfig.js';
 import { assertAllowedPath } from '../utils/pathGuard.js';
 
+function isInvalidDirectoryName(name: string): boolean {
+  return !name || name.includes('/') || name.includes('\\') || name === '.' || name === '..';
+}
+
 export class FileController {
   static async getFiles(req: Request, res: Response) {
     const dirParam = (req.query.path as string) || process.cwd();
@@ -43,7 +47,7 @@ export class FileController {
       return;
     }
 
-    if (name.includes('/') || name.includes('\\') || name === '.' || name === '..') {
+    if (isInvalidDirectoryName(name)) {
       res.status(400).json({ error: 'Invalid directory name' });
       return;
     }

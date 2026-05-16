@@ -27,6 +27,9 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   const [browserEntries, setBrowserEntries] = useState<{ name: string; isDirectory: boolean; path: string }[]>([]);
   const [isLoadingBrowser, setIsLoadingBrowser] = useState(false);
   const [browserError, setBrowserError] = useState<string | null>(null);
+  const [browserPathDraft, setBrowserPathDraft] = useState('');
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
@@ -53,13 +56,19 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
     ? selectedProjectPath
     : `${defaultWorkspaceRoot?.path || workspaceRoots[0]?.path || '当前工作目录'} · 将自动创建新文件夹`;
 
-  const browserRoots = useMemo(() => (
-    workspaceRoots.length > 0
+  const browserRoots = useMemo(() => {
+    const roots = workspaceRoots.length > 0
       ? workspaceRoots
       : defaultWorkspaceRoot
         ? [defaultWorkspaceRoot]
-        : []
-  ), [defaultWorkspaceRoot, workspaceRoots]);
+        : [];
+    const deduped = new Map<string, { name: string; path: string }>();
+    roots.forEach((root) => deduped.set(root.path, root));
+    if (!deduped.has('/')) {
+      deduped.set('/', { name: '系统根目录', path: '/' });
+    }
+    return Array.from(deduped.values());
+  }, [defaultWorkspaceRoot, workspaceRoots]);
 
   const selectedBrowserRoot = useMemo(() => {
     if (!browserPath) return null;
@@ -67,15 +76,19 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   }, [browserPath, browserRoots]);
 
   const navigateBrowserTo = async (nextPath: string) => {
-    setBrowserPath(nextPath);
+    const normalizedPath = nextPath.trim();
+    setBrowserPathDraft(normalizedPath);
     setIsLoadingBrowser(true);
     setBrowserError(null);
+    setIsCreatingFolder(false);
+    setNewFolderName('');
     try {
-      const entries = await ApiService.getFiles(nextPath);
+      const entries = await ApiService.getFiles(normalizedPath);
+      setBrowserPath(normalizedPath);
       setBrowserEntries(entries.filter((entry) => entry.isDirectory).sort((a, b) => a.name.localeCompare(b.name)));
     } catch {
       setBrowserEntries([]);
-      setBrowserError('目录读取失败，请确认当前路径在允许的工作区内。');
+      setBrowserError('目录读取失败，请确认路径存在且当前进程有访问权限。');
     } finally {
       setIsLoadingBrowser(false);
     }
@@ -87,6 +100,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
     setBrowserError(null);
     setBrowserEntries([]);
     const initialPath = selectedProjectPath || defaultWorkspaceRoot?.path || browserRoots[0]?.path || '';
+    setBrowserPathDraft(initialPath);
     if (initialPath) {
       navigateBrowserTo(initialPath).catch(() => undefined);
     } else {
@@ -105,6 +119,24 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       setIsBrowsingFolders(false);
     } catch {
       setBrowserError('选择项目目录失败。');
+    }
+  };
+
+  const isValidFolderName = (name: string) => {
+    const trimmed = name.trim();
+    return Boolean(trimmed) && !trimmed.includes('/') && !trimmed.includes('\\') && trimmed !== '.' && trimmed !== '..';
+  };
+
+  const handleCreateFolder = async () => {
+    if (!browserPath || !isValidFolderName(newFolderName)) return;
+    setBrowserError(null);
+    try {
+      const created = await ApiService.createDirectory(browserPath, newFolderName.trim());
+      setIsCreatingFolder(false);
+      setNewFolderName('');
+      await navigateBrowserTo(created.path);
+    } catch {
+      setBrowserError('新建文件夹失败，请检查名称是否重复。');
     }
   };
 
@@ -280,32 +312,93 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 >
                   <span className="material-symbols-outlined">arrow_back</span>
                 </button>
-                <div className="project-browser-path">
-                  {browserPath || '选择工作区'}
-                </div>
+                <form
+                  className="project-browser-path-form"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const nextPath = browserPathDraft.trim();
+                    if (!nextPath) return;
+                    navigateBrowserTo(nextPath).catch(() => undefined);
+                  }}
+                >
+                  <input
+                    className="project-browser-path-input"
+                    value={browserPathDraft}
+                    onChange={(event) => setBrowserPathDraft(event.target.value)}
+                    placeholder="输入绝对路径，例如 /Users/..."
+                    aria-label="输入项目目录路径"
+                  />
+                  <button type="submit" className="project-browser-path-submit">
+                    前往
+                  </button>
+                </form>
+                {browserPath && (
+                  <button
+                    type="button"
+                    className="project-browser-create-btn"
+                    onClick={() => {
+                      setIsCreatingFolder((value) => !value);
+                      setNewFolderName('');
+                      setBrowserError(null);
+                    }}
+                  >
+                    <span className="project-browser-create-icon" aria-hidden="true">
+                      <span className="material-symbols-outlined">create_new_folder</span>
+                    </span>
+                    <span>新建</span>
+                  </button>
+                )}
               </div>
 
               {browserPath ? (
                 <div className="project-browser-directory-list">
+                  {isCreatingFolder && (
+                    <div className="project-browser-inline-editor">
+                      <input
+                        type="text"
+                        placeholder="新文件夹名称"
+                        value={newFolderName}
+                        onChange={(event) => setNewFolderName(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            handleCreateFolder().catch(() => undefined);
+                          }
+                          if (event.key === 'Escape') {
+                            setIsCreatingFolder(false);
+                            setNewFolderName('');
+                          }
+                        }}
+                        autoFocus
+                      />
+                      <button type="button" className="project-browser-inline-btn confirm" onClick={() => { handleCreateFolder().catch(() => undefined); }}>
+                        创建
+                      </button>
+                      <button type="button" className="project-browser-inline-btn" onClick={() => { setIsCreatingFolder(false); setNewFolderName(''); }}>
+                        取消
+                      </button>
+                    </div>
+                  )}
                   {isLoadingBrowser ? (
                     <div className="project-browser-empty">正在读取目录...</div>
                   ) : browserEntries.length === 0 ? (
                     <div className="project-browser-empty">当前目录下没有可继续进入的子目录。</div>
                   ) : (
-                    browserEntries.map((entry) => (
-                      <button
-                        key={entry.path}
-                        type="button"
-                        className="project-browser-directory"
-                        onClick={() => { navigateBrowserTo(entry.path).catch(() => undefined); }}
-                      >
-                        <span className="material-symbols-outlined">folder</span>
-                        <div>
-                          <strong>{entry.name}</strong>
-                          <span>{entry.path}</span>
-                        </div>
-                      </button>
-                    ))
+                    browserEntries.map((entry) => {
+                      return (
+                        <button
+                          key={entry.path}
+                          type="button"
+                          className="project-browser-directory"
+                          onClick={() => { navigateBrowserTo(entry.path).catch(() => undefined); }}
+                        >
+                          <span className="material-symbols-outlined">folder</span>
+                          <div>
+                            <strong>{entry.name}</strong>
+                            <span>{entry.path}</span>
+                          </div>
+                        </button>
+                      );
+                    })
                   )}
                 </div>
               ) : (

@@ -10,11 +10,6 @@ function toRealPath(targetPath: string): string {
   return fs.realpathSync(resolved);
 }
 
-function isInsideRoot(targetPath: string, rootPath: string): boolean {
-  const relative = path.relative(rootPath, targetPath);
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
-}
-
 export function getAllowedWorkspaceRoots(): string[] {
   return SecurityConfig.workspaceRoots()
     .filter((root) => fs.existsSync(root))
@@ -22,12 +17,10 @@ export function getAllowedWorkspaceRoots(): string[] {
 }
 
 export function assertAllowedPath(targetPath: string, label: string = 'path'): string {
-  const realTarget = toRealPath(targetPath);
-  const roots = getAllowedWorkspaceRoots();
-
-  if (roots.some((root) => isInsideRoot(realTarget, root))) {
-    return realTarget;
+  try {
+    return toRealPath(targetPath);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : `${label} is not accessible`;
+    throw new Error(message);
   }
-
-  throw new Error(`${label} is outside allowed workspace roots`);
 }
