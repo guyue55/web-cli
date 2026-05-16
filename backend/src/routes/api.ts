@@ -15,3 +15,5 @@ apiRouter.patch('/history/:uuid/rename', SessionController.renameSession);
 apiRouter.post('/history/:uuid/restart', SessionController.forceRestartSession);
 
 apiRouter.get('/files', FileController.getFiles);
+apiRouter.get('/workspace-roots', FileController.getWorkspaceRoots);
+apiRouter.post('/files/directory', FileController.createDirectory);

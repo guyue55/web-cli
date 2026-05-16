@@ -58,6 +58,22 @@ export class ApiService {
     return res.json();
   }
 
+  static async getWorkspaceRoots(): Promise<{ name: string; path: string }[]> {
+    const res = await fetch(`${BASE_URL}/workspace-roots`, { headers: authHeaders() });
+    if (!res.ok) throw new Error('Failed to fetch workspace roots');
+    return res.json();
+  }
+
+  static async createDirectory(parentPath: string, name: string): Promise<{ name: string; path: string }> {
+    const res = await fetch(`${BASE_URL}/files/directory`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ parentPath, name }),
+    });
+    if (!res.ok) throw new Error('Failed to create directory');
+    return res.json();
+  }
+
   static async restartSession(uuid: string, projectPath: string): Promise<void> {
     const url = `${BASE_URL}/history/${uuid}/restart?projectPath=${encodeURIComponent(projectPath)}`;
     const res = await fetch(url, { method: 'POST', headers: authHeaders() });

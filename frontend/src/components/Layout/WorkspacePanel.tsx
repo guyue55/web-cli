@@ -8,6 +8,7 @@ interface WorkspacePanelProps {
   mode: WorkspacePanelMode;
   theme: string;
   projects: ProjectEntry[];
+  defaultWorkspaceRoot: { name: string; path: string } | null;
   groupedHistory: { name: string; items: HistoryItem[] }[];
   activeSessions: string[];
   selectedProjectPath: string;
@@ -32,6 +33,7 @@ export const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
   mode,
   theme,
   projects,
+  defaultWorkspaceRoot,
   groupedHistory,
   activeSessions,
   selectedProjectPath,
@@ -95,6 +97,9 @@ export const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
               <label className="workspace-field">
                 <span>新会话默认项目</span>
                 <select value={selectedProjectPath} onChange={(event) => onProjectChange(event.target.value)}>
+                  <option value="">
+                    默认工作区{defaultWorkspaceRoot ? ` · ${defaultWorkspaceRoot.path}` : ''}
+                  </option>
                   {projects.map(project => (
                     <option key={project.path} value={project.path}>
                       {project.name}

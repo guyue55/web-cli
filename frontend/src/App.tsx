@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Sidebar } from './components/Sidebar/Sidebar';
 import { ChatHistory } from './components/Chat/ChatHistory';
 import { PromptBox } from './components/PromptBox/PromptBox';
@@ -9,6 +9,7 @@ import { Header } from './components/Layout/Header';
 import { WelcomeScreen } from './components/Layout/WelcomeScreen';
 import { WorkspacePanel, type WorkspacePanelMode } from './components/Layout/WorkspacePanel';
 import { getSessionDisplayName, isUntitledSessionName } from './utils/sessionPresentation';
+import { ApiService } from './services/ApiService';
 import './App.css';
 
 const Terminal = lazy(() => import('./components/Terminal/Terminal'));
@@ -52,22 +53,87 @@ function App() {
     const saved = localStorage.getItem('terminal_mobile_helper_visible');
     return saved === null ? true : saved === 'true';
   });
+  const [workspaceRoots, setWorkspaceRoots] = useState<{ name: string; path: string }[]>([]);
+  const [customProjects, setCustomProjects] = useState<{ name: string; path: string }[]>(() => {
+    const saved = localStorage.getItem('custom_projects_v1');
+    try {
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      localStorage.removeItem('custom_projects_v1');
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    ApiService.getWorkspaceRoots()
+      .then(setWorkspaceRoots)
+      .catch(() => setWorkspaceRoots([]));
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('custom_projects_v1', JSON.stringify(customProjects));
+  }, [customProjects]);
+
+  const availableProjects = useMemo(() => {
+    const map = new Map<string, { name: string; path: string; isScanning?: boolean }>();
+    projects.forEach((project) => map.set(project.path, project));
+    customProjects.forEach((project) => {
+      if (!map.has(project.path)) {
+        map.set(project.path, project);
+      }
+    });
+    return Array.from(map.values());
+  }, [customProjects, projects]);
+
+  const defaultWorkspaceRoot = useMemo(() => {
+    return workspaceRoots[0] || (availableProjects[0] ? {
+      name: availableProjects[0].name,
+      path: availableProjects[0].path,
+    } : null);
+  }, [availableProjects, workspaceRoots]);
 
   const defaultProject = useMemo(() => {
-    const savedProject = projects.find(project => project.path === newSessionProjectPath);
+    const savedProject = availableProjects.find(project => project.path === newSessionProjectPath);
     if (savedProject) return savedProject;
+
+    if (!newSessionProjectPath && defaultWorkspaceRoot) {
+      return defaultWorkspaceRoot;
+    }
 
     const lastSession = groupedHistory[0]?.items[0];
     if (lastSession) {
       return { path: lastSession.projectPath, name: lastSession.projectName };
     }
 
-    return projects[0] || { path: '.', name: 'default' };
-  }, [groupedHistory, newSessionProjectPath, projects]);
+    return availableProjects[0] || defaultWorkspaceRoot || { path: '.', name: 'default' };
+  }, [availableProjects, defaultWorkspaceRoot, groupedHistory, newSessionProjectPath]);
 
   const handleNewSessionProjectChange = (projectPath: string) => {
     setNewSessionProjectPath(projectPath);
     localStorage.setItem('new_session_project_path', projectPath);
+  };
+
+  const handleAddProject = (projectPath: string, name: string) => {
+    const project = { path: projectPath, name };
+    setCustomProjects((prev) => (
+      prev.some((item) => item.path === project.path) ? prev : [...prev, project]
+    ));
+    handleNewSessionProjectChange(project.path);
+  };
+
+  const buildDefaultWorkspaceSession = async () => {
+    const root = defaultWorkspaceRoot;
+    if (!root) {
+      return { path: defaultProject.path, name: defaultProject.name };
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 16);
+    const created = await ApiService.createDirectory(root.path, `session-${timestamp}`);
+    const project = { path: created.path, name: created.name };
+    setCustomProjects((prev) => (
+      prev.some((item) => item.path === project.path) ? prev : [...prev, project]
+    ));
+    return project;
   };
 
   const handleTerminalFontSizeChange = (fontSize: number) => {
@@ -110,15 +176,18 @@ function App() {
     setWorkspacePanelMode(null);
   };
 
-  const handlePromptSubmit = (text: string) => {
+  const handlePromptSubmit = async (text: string) => {
     if (!text.trim()) return;
     
     if (!selectedSession) {
+      const projectForSession = newSessionProjectPath
+        ? defaultProject
+        : await buildDefaultWorkspaceSession();
       const newSession: HistoryItem = {
         id: `new-${Date.now()}`,
         name: text.substring(0, 30),
-        projectPath: defaultProject.path,
-        projectName: defaultProject.name,
+        projectPath: projectForSession.path,
+        projectName: projectForSession.name,
         index: '0',
         time: 'Just now',
         updatedAt: Date.now()
@@ -228,9 +297,12 @@ function App() {
           ) : (
             <WelcomeScreen
               onHandlePromptSubmit={handlePromptSubmit}
-              projects={projects}
-              selectedProjectPath={defaultProject.path}
+              projects={availableProjects}
+              workspaceRoots={workspaceRoots}
+              selectedProjectPath={newSessionProjectPath}
+              defaultWorkspaceRoot={defaultWorkspaceRoot}
               onProjectChange={handleNewSessionProjectChange}
+              onAddProject={handleAddProject}
             />
           )}
         </div>
@@ -243,7 +315,8 @@ function App() {
       <WorkspacePanel
         mode={workspacePanelMode}
         theme={theme}
-        projects={projects}
+        projects={availableProjects}
+        defaultWorkspaceRoot={defaultWorkspaceRoot}
         groupedHistory={groupedHistory}
         activeSessions={activeSessions}
         selectedProjectPath={defaultProject.path}

@@ -1,7 +1,13 @@
 import os from 'os';
 import { SecurityConfig } from '../config/SecurityConfig.js';
 
+let cachedLocalIPs: string[] | null = null;
+
 function getLocalIPs(): string[] {
+  if (cachedLocalIPs) {
+    return cachedLocalIPs;
+  }
+
   const interfaces = os.networkInterfaces();
   const ips: string[] = ['localhost', '127.0.0.1', '::1'];
   for (const name of Object.keys(interfaces)) {
@@ -11,7 +17,8 @@ function getLocalIPs(): string[] {
       }
     }
   }
-  return Array.from(new Set(ips));
+  cachedLocalIPs = Array.from(new Set(ips));
+  return cachedLocalIPs;
 }
 
 function isLocalOrPrivateOrigin(origin: string): boolean {
